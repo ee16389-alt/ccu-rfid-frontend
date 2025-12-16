@@ -56,7 +56,7 @@ export default {
   },
   methods: {
     handleBack() {
-      this.$message.info('切版完成，點擊返回 (需實作頁面導航)');
+      this.$message.info('點擊返回');
     },
     togglePlay() {
       this.isPlaying = !this.isPlaying;
