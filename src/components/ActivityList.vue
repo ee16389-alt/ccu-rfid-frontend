@@ -83,7 +83,7 @@ export default {
         });
     },
     handleAddActivity() {
-      this.$message.info('切版 Demo：新增活動功能');
+      this.$message.info('新增活動功能');
     },
     handleManage(activity) {
       this.$message.success(`正在管理活動：${activity.name}`);

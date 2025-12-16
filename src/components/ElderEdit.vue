@@ -70,13 +70,13 @@ export default {
   },
   methods: {
     handleBack() {
-      this.$message.info('切版完成，點擊返回 (應返回長者清單)');
+      this.$message.info('點擊返回 ');
     },
     handlePhotoUpload() {
-      this.$message.info('切版完成，點擊上傳照片 (需實作上傳與 embedding 建立)');
+      this.$message.info('點擊上傳照片 ');
     },
     handleSave() {
-      this.$message.success('切版完成，點擊儲存 (需實作儲存邏輯)');
+      this.$message.success('點擊儲存');
     }
   }
 };

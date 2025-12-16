@@ -82,10 +82,10 @@ export default {
   },
   methods: {
     handleBack() {
-      this.$message.info('切版完成，點擊返回 (需實作頁面導航)');
+      this.$message.info('點擊返回');
     },
     handleSave() {
-      this.$message.success('切版完成，點擊儲存設定 (需實作儲存邏輯)');
+      this.$message.success('點擊儲存設定');
     }
   }
 };

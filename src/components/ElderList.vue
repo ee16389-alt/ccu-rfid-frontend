@@ -107,7 +107,7 @@ export default {
         });
     },
     handleAddElder() {
-      this.$message.info('切版 Demo：新增長者功能');
+      this.$message.info('新增長者功能');
     },
     handleEdit(elder) {
       this.$message.success(`正在編輯長者：${elder.name}`);
