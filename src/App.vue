@@ -1,80 +1,179 @@
 <template>
   <div id="app">
-    <div style="padding: 10px; background: #f0f0f0; border-bottom: 1px solid #ddd; overflow-x: auto; white-space: nowrap;">
-      
-      <el-button @click="currentView = 'RFIDLanding'" size="small" type="success">RFID 感應 (Frame 0)</el-button>
-      <el-button @click="currentView = 'ActivityMenu'" size="small">回憶照片牆 (Frame 1)</el-button>
-      <el-button @click="currentView = 'Slideshow'" size="small">投影片播放 (Frame 3)</el-button>
-
-      <el-button @click="currentView = 'Login'" size="small" type="primary">後台登入 (Frame 4)</el-button>
-      <el-button @click="currentView = 'ActivityList'" size="small">活動清單 (Frame 5)</el-button>
-      <el-button @click="currentView = 'ElderList'" size="small">長者清單 (Frame 6)</el-button>
-      <el-button @click="currentView = 'ActivityManage'" size="small">活動管理 (Frame 2)</el-button>
-      <el-button @click="currentView = 'AIScreening'" size="small">AI 審核 (Frame 8)</el-button>
-      <el-button @click="currentView = 'ElderEdit'" size="small">編輯長者 (Frame 7)</el-button>
-      
+    <div v-if="debugMode" class="debug-toolbar">
+      <el-tag type="info" size="small">開發者工具</el-tag>
+      <el-button @click="currentView = 'RFIDLanding'" size="mini" type="success">長者端(0)</el-button>
+      <el-button @click="currentView = 'Login'" size="mini" type="primary">管理端(4)</el-button>
+      <el-button @click="debugMode = false" size="mini">隱藏</el-button>
     </div>
 
-    <div style="padding: 20px;">
-      <RFIDLanding v-if="currentView === 'RFIDLanding'" />
-      <Login v-else-if="currentView === 'Login'" />
-      <ActivityList v-else-if="currentView === 'ActivityList'" />
-      <ElderList v-else-if="currentView === 'ElderList'" />
-      <ActivityMenu v-else-if="currentView === 'ActivityMenu'" />
-      <ActivityManage v-else-if="currentView === 'ActivityManage'" />
-      <Slideshow v-else-if="currentView === 'Slideshow'" />
-      <ElderEdit v-else-if="currentView === 'ElderEdit'" />
-      <AIScreening v-else-if="currentView === 'AIScreening'" />
+    <div class="container">
+      <RFIDLanding 
+        v-if="currentView === 'RFIDLanding'" 
+        @scan-success="onScanSuccess" 
+      />
+
+      <ActivityMenu 
+        v-else-if="currentView === 'ActivityMenu'" 
+        :residentId="selectedResidentId"
+        @select-activity="onSelectActivity"
+        @go-back="currentView = 'RFIDLanding'"
+      />
+
+      <Slideshow 
+        v-else-if="currentView === 'Slideshow'" 
+        :residentId="selectedResidentId"
+        :activityId="selectedActivityId"
+        @go-back="currentView = 'ActivityMenu'"
+      />
+
+      <Login 
+        v-else-if="currentView === 'Login'" 
+        @login-success="currentView = 'ActivityList'" 
+      />
+
+      <ActivityList 
+        v-else-if="currentView === 'ActivityList'" 
+        @manage-activity="onManageActivity"
+        @add-activity="currentView = 'ActivityManage'"
+      />
+
+      <ActivityManage 
+        v-else-if="currentView === 'ActivityManage'" 
+        :selectedActivity="activeActivityObject"
+        @go-back="currentView = 'ActivityList'"
+        @go-screening="currentView = 'AIScreening'"
+      />
+
+      <AIScreening 
+        v-else-if="currentView === 'AIScreening'" 
+        :activityId="selectedActivityId"
+        @go-back="currentView = 'ActivityManage'"
+      />
+
+      <ElderList 
+        v-else-if="currentView === 'ElderList'" 
+        @edit-elder="onEditElder"
+      />
+
+      <ElderEdit 
+        v-else-if="currentView === 'ElderEdit'" 
+        :elderId="selectedResidentId"
+        @go-back="currentView = 'ElderList'"
+      />
       
-      <p v-else style="text-align: center;">請選擇一個畫面開始切版</p>
+      <p v-else style="text-align: center;">系統載入中...</p>
+    </div>
+
+    <div v-if="isAdminView" class="admin-nav">
+      <el-button @click="currentView = 'ActivityList'" icon="el-icon-s-order">活動</el-button>
+      <el-button @click="currentView = 'ElderList'" icon="el-icon-user-solid">長者</el-button>
+      <el-button @click="logout" type="text" style="color: #909399;">登出</el-button>
     </div>
   </div>
 </template>
 
 <script>
-// 引入所有 9 個畫面元件
-import RFIDLanding from './components/RFIDLanding.vue'; // Frame 0
-import ActivityMenu from './components/ActivityMenu.vue'; // Frame 1
-import Slideshow from './components/Slideshow.vue'; // Frame 3
-import Login from './components/Login.vue'; // Frame 4
-import ActivityList from './components/ActivityList.vue'; // Frame 5
-import ElderList from './components/ElderList.vue'; // Frame 6
-import ElderEdit from './components/ElderEdit.vue'; // Frame 7
-import AIScreening from './components/AIScreening.vue'; // Frame 8
-import ActivityManage from './components/ActivityManage.vue'; // Frame 2
+// 引入所有組件
+import RFIDLanding from './components/RFIDLanding.vue';
+import ActivityMenu from './components/ActivityMenu.vue';
+import Slideshow from './components/Slideshow.vue';
+import Login from './components/Login.vue';
+import ActivityList from './components/ActivityList.vue';
+import ElderList from './components/ElderList.vue';
+import ElderEdit from './components/ElderEdit.vue';
+import AIScreening from './components/AIScreening.vue';
+import ActivityManage from './components/ActivityManage.vue';
 
 export default {
   name: 'App',
   components: {
-    RFIDLanding,
-    ActivityMenu,
-    Slideshow,
-    Login,
-    ActivityList,
-    ElderList,
-    ElderEdit,
-    AIScreening,
-    ActivityManage
+    RFIDLanding, ActivityMenu, Slideshow, Login,
+    ActivityList, ElderList, ElderEdit, AIScreening, ActivityManage
   },
   data() {
     return {
-      // 將預設畫面設定為 RFID 感應頁 (Frame 0)，這是長者端的第一個畫面
-      currentView: 'RFIDLanding' 
+      currentView: 'RFIDLanding',
+      debugMode: true,
+      selectedResidentId: null, // 暫存長者 ID
+      selectedActivityId: null, // 暫存活動 ID
+      activeActivityObject: null // 傳遞給管理頁面的物件
     };
+  },
+  computed: {
+    // 判斷目前是否在後台管理頁面
+    isAdminView() {
+      const adminPages = ['ActivityList', 'ElderList', 'ActivityManage', 'ElderEdit', 'AIScreening'];
+      return adminPages.includes(this.currentView);
+    }
+  },
+  methods: {
+    // 處理長者感應成功
+    onScanSuccess(id) {
+      this.selectedResidentId = id;
+      this.currentView = 'ActivityMenu';
+    },
+    // 處理選擇播放活動
+    onSelectActivity(id) {
+      this.selectedActivityId = id;
+      this.currentView = 'Slideshow';
+    },
+    // 處理點擊活動管理
+    onManageActivity(id) {
+      this.selectedActivityId = id;
+      this.activeActivityObject = { id: id, name: '載入中...' };
+      this.currentView = 'ActivityManage';
+    },
+    // 處理點擊編輯長者
+    onEditElder(id) {
+      this.selectedResidentId = id;
+      this.currentView = 'ElderEdit';
+    },
+    // 登出並清除 Token
+    logout() {
+      localStorage.removeItem('userToken');
+      this.currentView = 'Login';
+    }
   }
 };
 </script>
 
 <style>
-/* 為了讓 Element UI 圓角和背景更接近 Figma */
 #app {
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  color: #2c3e50;
+  font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   min-height: 100vh;
-  background-color: #f7f3ed; /* 淺黃/淺米色背景 */
+  background-color: #f7f3ed;
 }
-/* 移除預設的 Vue Logo 樣式 */
-.logo-container {
-  display: none;
+
+.debug-toolbar {
+  padding: 8px;
+  background: #333;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  overflow-x: auto;
+}
+
+.container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.admin-nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: #ffffff;
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  z-index: 1000;
+}
+
+/* 移除 Element UI 預設按鈕間距 */
+.admin-nav .el-button + .el-button {
+  margin-left: 0;
 }
 </style>

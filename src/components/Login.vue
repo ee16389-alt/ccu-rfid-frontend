@@ -11,7 +11,7 @@
           <el-input v-model="loginForm.username" placeholder="請輸入帳號"></el-input>
         </el-form-item>
         <el-form-item label="密碼">
-          <el-input type="password" v-model="loginForm.password" placeholder="請輸入密碼"></el-input>
+          <el-input type="password" v-model="loginForm.password" placeholder="請輸入密碼" @keyup.enter.native="handleLogin"></el-input>
         </el-form-item>
         <el-form-item style="margin-top: 40px;">
           <el-button 
@@ -37,36 +37,60 @@ export default {
   data() {
     return {
       loginForm: {
-        username: '', // 對應頁面輸入框
+        username: '', 
         password: ''
       }
     };
   },
   methods: {
     handleLogin() {
-      // 構建符合 LoginRequest 結構的 Payload
+      // 1. 檢查輸入
+      if (!this.loginForm.username || !this.loginForm.password) {
+        this.$message.warning('請輸入帳號與密碼');
+        return;
+      }
+
+      // 2. 構建符合 API 要求的 Payload (根據您的後端需求使用 account/password)
       const payload = {
-        account: this.loginForm.username, // 欄位須為 account
-        password: this.loginForm.password  // 欄位須為 password
+        account: this.loginForm.username,
+        password: this.loginForm.password 
       };
 
-      // 呼叫登入 API
+      // 3. 呼叫登入 API
       this.$http.post('/manager-api/Admin/login', payload)
         .then(response => {
-          this.$message.success('行政管理端登入成功！');
-          
-          // 如果 API 回傳 Token，我們將其存入全域 Header
-          // 這樣之後呼叫其他 API 就不會再出現 401 錯誤了
-          if (response.data && response.data.token) {
-            this.$http.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-          }
+          // 4. 取得 Token
+          // 容錯處理：後端可能包在 data 裡或直接在 response.data 中
+          const token = response.data.token || (response.data.data && response.data.data.token);
 
-          // 通知父元件登入成功，切換畫面
-          this.$emit('login-success');
+          if (token) {
+            // --- 核心修改：永久儲存與即時生效 ---
+            // 將 Token 存入 localStorage 以便跨頁面使用
+            localStorage.setItem('userToken', token);
+            
+            // 設定 axios 的全域 Header，讓此元件接下來的請求自動帶上 Token
+            this.$http.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            
+            this.$message.success('行政管理端登入成功！');
+            
+            // 通知父元件切換顯示狀態 (例如進入管理首頁)
+            this.$emit('login-success');
+          } else {
+            this.$message.error('登入成功，但未取得授權碼(Token)');
+          }
         })
         .catch(error => {
           console.error("登入失敗:", error);
-          this.$message.error('帳號或密碼錯誤，請重新輸入');
+          
+          // 5. CORS 診斷處理
+          if (error.message === 'Network Error') {
+             this.$message.error('無法連線到伺服器，請確認後端 CORS 設定已加入您的網址');
+          } else {
+             const errorMsg = error.response && error.response.data && error.response.data.message 
+                               ? error.response.data.message 
+                               : '帳號或密碼錯誤';
+             this.$message.error(errorMsg);
+          }
         });
     }
   }

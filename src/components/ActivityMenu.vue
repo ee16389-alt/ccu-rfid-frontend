@@ -39,12 +39,11 @@
 <script>
 export default {
   name: 'ActivityMenu',
-  // 接收從 RFIDLanding 傳遞過來的長者 ID
   props: ['residentId'],
   data() {
     return {
-      // 存放該長者的活動清單
-      activities: []
+      // 統一使用 activityList 以對應 template
+      activityList: []
     };
   },
   mounted() {
@@ -52,26 +51,50 @@ export default {
   },
   methods: {
     fetchResidentActivities() {
-      // 呼叫活動 API
-      // 這裡我們先獲取所有活動，實務上後端通常會根據 residentId 過濾
-      this.$http.get('/manager-api/Activity')
+      // 1. 從 localStorage 提取登入時存入的 Token
+      const token = localStorage.getItem('userToken');
+
+      if (!token) {
+        this.$message.warning('尚未偵測到登入憑證，請先登入');
+        return;
+      }
+
+      // 2. 呼叫活動 API，並在 Header 帶上 Authorization
+      // 提示：若後端支援，可改為 `/manager-api/Activity?residentId=${this.residentId}`
+      this.$http.get('/manager-api/Activity', {
+        headers: {
+          'Authorization': `Bearer ${token}` // 標準 JWT 格式
+        }
+      })
         .then(response => {
-          // 對應 ActivityModel：title, photo_count, activity_at
-          this.activities = response.data.map(item => ({
+          // 3. 將 API 回傳資料映射至前端顯示格式
+          this.activityList = response.data.map(item => ({
             id: item.id,
-            title: item.title || '精彩活動',
-            date: item.activity_at ? item.activity_at.split('T')[0] : '',
+            name: item.title || '精彩活動',
+            date: item.activity_at ? item.activity_at.split('T')[0] : '無日期',
             photoCount: item.photo_count || 0
           }));
+          this.$message.success('照片牆載入成功');
         })
         .catch(error => {
           console.error("載入照片牆失敗:", error);
+          // 4. 針對 CORS 或 401 進行錯誤提示
+          if (error.response && error.response.status === 401) {
+            this.$message.error('驗證失敗，請重新登入');
+          } else {
+            this.$message.error('無法取得活動資料，請確認 API 連線與 CORS 設定');
+          }
         });
     },
-    handleActivityClick(activity) {
-      this.$message.success(`即將播放：${activity.title}`);
-      // 點擊後跳轉至投影片播放 (Frame 3)
+    // 修正：方法名稱與 template 的 @click.native 保持一致
+    handleSelectActivity(activity) {
+      this.$message.success(`即將播放：${activity.name}`);
+      // 發送事件給父元件切換至 Frame 3 (Slideshow)
       this.$emit('select-activity', activity.id);
+    },
+    handleBack() {
+      // 發送回上一頁的事件
+      this.$emit('go-back');
     }
   }
 };
@@ -80,40 +103,70 @@ export default {
 <style scoped>
 .activity-menu-container {
     padding: 20px;
+    background-color: #fffaf5; /* 輕微背景色提升質感 */
+    min-height: 100vh;
 }
-/* 省略其他樣式... */
+
 .header-playback {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    border-bottom: 2px solid #f0e6da;
+    padding-bottom: 15px;
 }
 
-.back-button {
-    background-color: #FF9933;
-    border-color: #FF9933;
-    color: white;
+.main-title {
+    font-size: 24px;
+    color: #5a5a5a;
+    margin: 0;
+}
+
+.prompt-text {
+    color: #909399;
+    margin-bottom: 20px;
+}
+
+.activity-col {
+    margin-bottom: 25px;
 }
 
 .activity-card {
     border-radius: 15px;
     border: 1px solid #f0e6da;
     cursor: pointer;
-    box-shadow: none;
-    transition: all 0.2s;
-    height: 100%;
-    background-color: #fcf6ee;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+    background-color: #ffffff;
 }
 
 .activity-card:hover {
-    box-shadow: 0 6px 15px rgba(255, 153, 51, 0.3);
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(255, 153, 51, 0.2);
+    border-color: #FF9933;
 }
 
 .image-placeholder {
     width: 100%;
-    padding-top: 65%;
+    padding-top: 60%;
     background-color: #f0e6da;
-    border-radius: 8px;
+    background-image: linear-gradient(45deg, #f0e6da 25%, #f7f0e8 25%, #f7f0e8 50%, #f0e6da 50%, #f0e6da 75%, #f7f0e8 75%, #f7f0e8 100%);
+    background-size: 20px 20px;
+    border-radius: 10px;
     margin-bottom: 15px;
+}
+
+.activity-name {
+    text-align: center;
+    font-weight: bold;
+    color: #606266;
+    margin: 10px 0;
+}
+
+.back-button {
+    background-color: #FF9933;
+    border-color: #FF9933;
+    color: white;
+    font-weight: bold;
 }
 </style>

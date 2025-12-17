@@ -2,7 +2,7 @@
   <div class="screening-container">
     <div class="header-section">
       <h2 style="font-weight: 500;">AI 分群結果審核</h2>
-      <span class="activity-info-display">活動：社區歌唱日 • 36 張已分析</span>
+      <span class="activity-info-display">活動：{{ activityName }} • {{ screeningList.length }} 張待審核</span>
       <el-button 
         type="warning" 
         @click="handleBack"
@@ -21,7 +21,17 @@
         <el-card shadow="never" class="screening-card">
           <el-row :gutter="20">
             <el-col :span="10">
-              <div class="photo-placeholder">照片</div>
+              <div class="photo-container">
+                <el-image 
+                  :src="photo.url" 
+                  fit="cover" 
+                  class="actual-photo"
+                >
+                  <div slot="error" class="image-slot">
+                    <i class="el-icon-picture-outline"></i>
+                  </div>
+                </el-image>
+              </div>
             </el-col>
 
             <el-col :span="14">
@@ -42,6 +52,10 @@
       </el-col>
     </el-row>
 
+    <div v-if="screeningList.length === 0" style="text-align: center; margin: 50px 0; color: #909399;">
+      目前暫無待審核的照片。
+    </div>
+
     <div style="text-align: right; margin-top: 30px;">
       <el-button 
         type="warning" 
@@ -57,39 +71,70 @@
 <script>
 export default {
   name: 'AIScreening',
+  props: ['activityId'], // 由路由或父組件傳入活動 ID
   data() {
     return {
-      screeningList: [
-        {
-          id: 1, 
-          candidates: [{id: 1, name: '陳阿嬤'}, {id: 2, name: '李伯伯'}],
-          matchedElders: [1] // 模擬已勾選陳阿嬤
-        },
-        {
-          id: 2, 
-          candidates: [{id: 3, name: '王先生'}, {id: 4, name: '林小姐'}],
-          matchedElders: [3] // 模擬已勾選王先生
-        },
-        {
-          id: 3, 
-          candidates: [{id: 5, name: '劉奶奶'}],
-          matchedElders: [] // 待審核
-        }
-      ]
+      activityName: '載入中...',
+      screeningList: []
     };
   },
+  mounted() {
+    this.fetchScreeningData();
+  },
   methods: {
+    fetchScreeningData() {
+      // 1. 取得 Token
+      const token = localStorage.getItem('userToken');
+      if (!token) return;
+
+      // 2. 呼叫 AI 分類結果 API
+      this.$http.get(`/manager-api/Activity/${this.activityId}/Screening`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        // 假設 API 回傳格式包含照片 URL、候選人與初步辨識結果
+        this.screeningList = res.data.map(item => ({
+          id: item.photo_id,
+          url: item.photo_url,
+          candidates: item.all_elders, // 該活動所有可能的長者
+          matchedElders: item.recognized_elder_ids || [] // AI 初步認出的長者
+        }));
+        this.activityName = res.data.activity_title || '社區活動';
+      })
+      .catch(err => {
+        console.error("讀取 AI 資料失敗", err);
+        this.$message.error('無法連線至 AI 伺服器，請確認 CORS 設定');
+      });
+    },
     handleBack() {
-      this.$message.info('點擊返回 ');
+      this.$emit('go-back');
     },
     handleSave() {
-      this.$message.success('點擊儲存審核');
+      const token = localStorage.getItem('userToken');
+      
+      // 3. 將審核後的結果傳回後端
+      this.$http.post(`/manager-api/Activity/${this.activityId}/Screening/Save`, {
+        results: this.screeningList.map(p => ({
+          photo_id: p.id,
+          resident_ids: p.matchedElders
+        }))
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(() => {
+        this.$message.success('審核結果已儲存！');
+        this.handleBack();
+      })
+      .catch(err => {
+        this.$message.error('儲存失敗，請確認登入狀態');
+      });
     }
   }
 };
 </script>
 
 <style scoped>
+/* 基本樣式繼承您原本的設計，加入照片容器優化 */
 .header-section {
   display: flex;
   align-items: center;
@@ -99,47 +144,38 @@ export default {
     font-size: 16px;
     color: #909399;
     flex-grow: 1;
+    margin-left: 15px;
 }
 .back-button {
   background-color: #FF9933;
   border-color: #FF9933;
+  color: white;
 }
-.prompt-text {
-    font-size: 14px;
-    color: #606266;
-    margin-bottom: 25px;
+.photo-container {
+    width: 100%;
+    height: 120px;
+    background-color: white;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #e0c8b0;
+}
+.actual-photo {
+    width: 100%;
+    height: 100%;
 }
 .screening-card {
     border-radius: 12px;
     border: 1px solid #f0e6da;
-    box-shadow: none;
     background-color: #fcf6ee;
-    padding: 15px;
-}
-.photo-placeholder {
-    width: 100%;
-    padding-top: 100%;
-    background-color: white;
-    border-radius: 6px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #909399;
-    font-size: 14px;
-    border: 1px solid #e0c8b0;
-}
-.match-title {
-    margin-top: 0;
-    font-weight: 600;
-    color: #303133;
 }
 .elder-checkbox {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
 }
 .save-button {
   background-color: #FF9933;
   border-color: #FF9933;
-  font-size: 16px;
+  color: white;
+  padding: 12px 30px;
 }
 </style>

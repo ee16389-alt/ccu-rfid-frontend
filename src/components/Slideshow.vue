@@ -2,7 +2,7 @@
   <div class="slideshow-container">
     <div class="header-playback">
       <h1 class="main-title">回憶播放</h1>
-      <span class="activity-info">活動：社區歌唱日</span>
+      <span class="activity-info">活動：{{ activityName }}</span>
       <el-button 
         type="warning" 
         @click="handleBack"
@@ -18,8 +18,18 @@
           <i class="el-icon-arrow-left"></i>
         </div>
         
-        <div class="current-photo-placeholder">
-          照片播放區 (示意)
+        <div class="current-photo-container">
+          <el-image 
+            v-if="photoList.length > 0"
+            :src="photoList[currentPhotoIndex].url" 
+            fit="contain"
+            class="main-photo"
+          >
+            <div slot="placeholder" class="image-loading">載入回憶中...</div>
+          </el-image>
+          <div v-else class="current-photo-placeholder">
+            正在準備您的珍貴回憶...
+          </div>
         </div>
 
         <div class="nav-arrow right-arrow" @click="nextPhoto">
@@ -34,11 +44,11 @@
         @click="togglePlay"
         class="control-button"
       >
-        {{ isPlaying ? '暫停' : '播放' }}
+        {{ isPlaying ? '暫停播放' : '繼續播放' }}
       </el-button>
       
       <span class="photo-counter">
-        {{ currentPhotoIndex + 1 }} / {{ totalPhotos }} 張
+        {{ photoList.length > 0 ? currentPhotoIndex + 1 : 0 }} / {{ photoList.length }} 張
       </span>
     </div>
   </div>
@@ -47,103 +57,110 @@
 <script>
 export default {
   name: 'Slideshow',
+  props: ['residentId', 'activityId'], // 接收從選單頁傳來的參數
   data() {
     return {
       isPlaying: true,
-      currentPhotoIndex: 11,
-      totalPhotos: 48,
+      currentPhotoIndex: 0,
+      photoList: [],
+      activityName: '載入中...',
+      timer: null
     };
   },
+  mounted() {
+    this.fetchPhotos();
+    this.startTimer();
+  },
+  beforeDestroy() {
+    this.stopTimer(); // 離開頁面時務必停止計時器
+  },
   methods: {
-    handleBack() {
-      this.$message.info('點擊返回');
+    fetchPhotos() {
+      const token = localStorage.getItem('userToken');
+      if (!token) return;
+
+      // 呼叫 API 取得該長者在特定活動的照片清單
+      // 假設路徑：/api/Resident/{rid}/Activity/{aid}/Photos
+      this.$http.get(`/api/Resident/${this.residentId}/Activity/${this.activityId}/Photos`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        this.photoList = res.data.photos.map(p => ({ url: p.photo_url }));
+        this.activityName = res.data.activity_title || '精選活動';
+      })
+      .catch(err => {
+        console.error("照片載入失敗", err);
+        this.$message.error('無法讀取照片，請確認連線或 CORS 設定');
+      });
+    },
+    startTimer() {
+      this.timer = setInterval(() => {
+        if (this.isPlaying) {
+          this.nextPhoto();
+        }
+      }, 3000); // 每 3 秒切換一張
+    },
+    stopTimer() {
+      if (this.timer) clearInterval(this.timer);
     },
     togglePlay() {
       this.isPlaying = !this.isPlaying;
-      this.$message.info(this.isPlaying ? '開始播放' : '已暫停');
     },
     prevPhoto() {
-      this.$message.info('切版完成，上一張照片');
+      if (this.photoList.length === 0) return;
+      this.currentPhotoIndex = (this.currentPhotoIndex - 1 + this.photoList.length) % this.photoList.length;
     },
     nextPhoto() {
-      this.$message.info('切版完成，下一張照片');
+      if (this.photoList.length === 0) return;
+      this.currentPhotoIndex = (this.currentPhotoIndex + 1) % this.photoList.length;
+    },
+    handleBack() {
+      this.$emit('go-back');
     }
   }
 };
 </script>
 
 <style scoped>
+/* 保持原本樣式並優化照片顯示 */
 .slideshow-container {
   padding: 20px;
   max-width: 900px;
   margin: 0 auto;
 }
-
 .header-playback {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 25px;
 }
-
-.back-button {
-  background-color: #FF9933;
-  border-color: #FF9933;
+.activity-info {
+  font-size: 18px;
+  color: #606266;
 }
-
-.slideshow-area {
-  border-radius: 15px;
-  border: 1px solid #f0e6da;
-  box-shadow: none;
-  background-color: #fcf6ee;
-  padding: 0;
-}
-
-.photo-display {
-  position: relative;
+.current-photo-container {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  padding-top: 56.25%;
+  height: 100%;
+  background-color: #000; /* 黑底讓照片更突出 */
+}
+.main-photo {
+  width: 100%;
+  height: 100%;
+}
+.nav-arrow {
+  z-index: 100;
+}
+.left-arrow { left: 20px; }
+.right-arrow { right: 20px; }
+.controls-bar {
+  margin-top: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
-.current-photo-placeholder {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: #909399;
-}
-
-.nav-arrow {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 50px;
-    height: 50px;
-    background-color: rgba(255, 153, 51, 0.8);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: white;
-    font-size: 30px;
-    z-index: 10;
-}
-
-.control-button {
-    background-color: #FF9933;
-    border-color: #FF9933;
-    margin-right: 10px;
-}
-.el-button--info {
-    background-color: #909399;
-    border-color: #909399;
-}
-</style>
+.photo-counter {
+  margin-left: 20px;
+  font-size: 18px

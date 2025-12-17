@@ -31,10 +31,22 @@ export default {
   name: 'RFIDLanding',
   methods: {
     handleStart() {
+      // 1. 先確認是否有管理員 Token
+      const token = localStorage.getItem('userToken');
+      if (!token) {
+        this.$message.error('系統尚未初始化，請先由行政端登入');
+        return;
+      }
+
       // 這裡假設感應到的卡片 ID 為 "A001"
       const cardUid = "A001"; 
 
-      this.$http.get(`/api/Rfid/${cardUid}`)
+      // 2. 呼叫 RFID 驗證 API 並帶上 Token
+      this.$http.get(`/api/Rfid/${cardUid}`, {
+        headers: {
+          'Authorization': `Bearer ${token}` //
+        }
+      })
         .then(response => {
           // 回傳的是 ResidentModel 資訊
           const resident = response.data;
@@ -48,8 +60,13 @@ export default {
           this.$emit('scan-success', resident.id);
         })
         .catch(error => {
-          this.$message.error('感應失敗：卡片未註冊');
           console.error("RFID 驗證失敗:", error);
+          // 3. 判斷是否為 CORS 或權限問題
+          if (error.response && error.response.status === 401) {
+            this.$message.error('授權已過期，請重新登入管理端');
+          } else {
+            this.$message.error('感應失敗：卡片未註冊或網路連線錯誤');
+          }
         });
     }
   }
@@ -62,7 +79,8 @@ export default {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 90vh; /* 確保內容垂直置中 */
+    min-height: 90vh;
+    background-color: #fffaf5; /* 增加背景色使其更溫暖 */
 }
 
 .main-title {
@@ -73,7 +91,7 @@ export default {
 }
 
 .rfid-icon-wrapper {
-    background-color: #FF9933; /* 橘色圓形背景 */
+    background-color: #FF9933;
     width: 200px;
     height: 200px;
     border-radius: 50%;
@@ -82,6 +100,7 @@ export default {
     align-items: center;
     position: relative;
     margin-bottom: 30px;
+    box-shadow: 0 10px 20px rgba(255, 153, 51, 0.3); /* 增加陰影感 */
 }
 
 .rfid-icon {
@@ -112,12 +131,14 @@ export default {
     height: 60px;
     font-size: 24px;
     font-weight: bold;
+    border-radius: 30px; /* 圓角更適合長者介面 */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .footer-text {
     position: absolute;
     bottom: 20px;
-    font-size: 12px;
+    font-size: 14px;
     color: #909399;
 }
 </style>
