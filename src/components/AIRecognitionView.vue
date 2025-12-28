@@ -16,7 +16,7 @@ export default {
       selectedResidentId: ''
     };
   },
-  // 確保生命週期內正確呼叫方法
+  // 生命週期勾子
   mounted() {
     // 使用 nextTick 確保組件實例已完全就緒
     this.$nextTick(() => {
@@ -27,16 +27,17 @@ export default {
   beforeDestroy() {
     window.removeEventListener('resize', this.refreshBoxes);
   },
-  methods: {
-    // 1. 核心辨識結果抓取：確保路徑包含 /manager-api/
+  methods: { // <--- 確保所有方法都寫在這個 methods 物件內
+    // 1. 核心辨識結果抓取：對接 /manager-api/ 路徑
     async fetchAIResults() {
       this.loading = true;
       this.isDemoMode = false;
       const token = localStorage.getItem('userToken');
       try {
-        // 對接後端正式環境路徑
+        // 對接後端正式環境路徑，並延長逾時時間至 30 秒以應對 Azure 冷啟動
         const response = await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize`, {}, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeout: 30000 
         });
         
         // 修正邏輯：若回傳空資料或失敗，則自動啟動 Demo 模式
@@ -46,7 +47,7 @@ export default {
           this.loadMockData(); 
         }
       } catch (err) {
-        console.warn('API 抓取失敗，進入示範模式', err);
+        console.warn('API 抓取失敗或逾時，進入示範模式', err);
         this.loadMockData(); 
       } finally {
         this.processData();
@@ -56,16 +57,17 @@ export default {
 
     loadMockData() {
       this.isDemoMode = true;
-      const baseUrl = process.env.BASE_URL;
-      // 模擬後端回傳格式，確保 Demo 時也能看見人臉框
+      const baseUrl = process.env.BASE_URL || './';
+      // 使用穩定圖源進行示範，確保容器能撐開並正確顯示橘框
       this.rawResults = [{
         "resident_id": "3",
         "resident_name": "唐伯虎",
         "confidence": 0.56,
         "photos": [{
-          "photo_id": 54,
-          "photo_url": `${baseUrl}slideshow/activity2.png`, 
-          "bounding_box": [511, 116, 666, 270] 
+          "photo_id": 999,
+          // 若本地圖片 activity2.png 抓不到，改用線上穩定圖源測試
+          "photo_url": "https://picsum.photos/id/237/800/600", 
+          "bounding_box": [150, 200, 450, 500] // [top, left, bottom, right]
         }]
       }];
     },
@@ -127,7 +129,6 @@ export default {
     async fetchAllResidents() {
       try {
         const token = localStorage.getItem('userToken');
-        // 確保路徑與 Swagger 對接
         const res = await this.$http.get('/manager-api/Resident', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -167,7 +168,6 @@ export default {
         });
 
         const token = localStorage.getItem('userToken');
-        // 對接 Swagger 確認存檔路徑
         await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize/confirm`, payload, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -184,6 +184,6 @@ export default {
     refreshBoxes() {
       this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
     }
-  }
-};
+  } // <--- methods 結束
+}; // <--- export default 結束
 </script>
