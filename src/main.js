@@ -31,17 +31,20 @@ const router = new VueRouter({
 
 // --- Axios 實例配置 ---
 const instance = axios.create({
-  // 指向同學提供的 Azure 正式環境路徑
-  baseURL: 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net',
-  timeout: 15000,
+  // 修正點 1：將 /manager-api 直接加入 baseURL，統一口徑
+  baseURL: 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api',
+  // 修正點 2：延長逾時時間至 30 秒，避免 Azure 冷啟動導致連線中斷
+  timeout: 30000, 
   withCredentials: false 
 });
 
 // --- 攔截器：確保每一筆請求都帶上管理員 Token ---
 instance.interceptors.request.use(
   config => {
+    // 從本地儲存取得 Token
     const token = localStorage.getItem('userToken');
     if (token) {
+      // 為所有請求注入 Authorization Header
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -49,7 +52,7 @@ instance.interceptors.request.use(
   error => Promise.reject(error)
 );
 
-// 全域掛載 API 請求工具
+// 全域掛載 API 請求工具，讓組件內可以使用 this.$http
 Vue.prototype.$http = instance;
 
 new Vue({

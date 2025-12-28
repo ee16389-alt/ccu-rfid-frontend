@@ -1,3 +1,63 @@
+<template>
+  <div class="ai-recognition-container">
+    <div class="header-section">
+      <el-page-header @back="$emit('go-back')" content="AI 辨識結果預覽"></el-page-header>
+      <el-tag v-if="isDemoMode" type="warning" effect="dark" class="demo-badge">示範模式 (API 逾時)</el-tag>
+    </div>
+
+    <el-card v-loading="loading" class="main-card">
+      <div v-if="processedPhotos.length > 0" class="photo-grid">
+        <div v-for="photo in processedPhotos" :key="photo.photo_id" class="photo-item">
+          <div class="image-wrapper">
+            <img 
+              :ref="'img-' + photo.photo_id"
+              :src="photo.photo_url"
+              @load="drawBoxes(photo.photo_id)" 
+              class="recognition-image"
+            >
+            
+            <div 
+              v-for="(det, index) in photo.detections" 
+              :key="index"
+              class="face-box"
+              :style="det.boxStyle"
+              @click="openCorrectionDialog(det)"
+            >
+              <span class="name-label" :class="{ 'is-edited': det.isEdited }">
+                {{ det.resident_name }} ({{ (det.confidence * 100).toFixed(0) }}%)
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-else-if="!loading" class="empty-state">
+        <el-empty description="目前該活動尚未有辨識資料"></el-empty>
+      </div>
+
+      <div class="action-bar">
+        <el-button type="success" size="large" icon="el-icon-check" :loading="submitting" @click="handleConfirm">
+          確認並正式存檔
+        </el-button>
+      </div>
+    </el-card>
+
+    <el-dialog title="修正辨識結果" :visible.sync="dialogVisible" width="30%">
+      <el-form label-width="80px">
+        <el-form-item label="正確長者">
+          <el-select v-model="selectedResidentId" filterable placeholder="請選擇長者">
+            <el-option v-for="r in allResidents" :key="r.id" :label="r.name" :value="r.id"></el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTempCorrection">暫存修改</el-button>
+      </span>
+    </el-dialog>
+  </div>
+</template>
+
 <script>
 export default {
   name: 'AIRecognitionView',
@@ -9,45 +69,40 @@ export default {
       isDemoMode: false,
       rawResults: [],
       processedPhotos: [],
-      // 彈窗相關
       dialogVisible: false,
       allResidents: [],
       currentDet: {},
       selectedResidentId: ''
     };
   },
-  // 生命週期勾子
   mounted() {
-    // 使用 nextTick 確保組件實例已完全就緒
     this.$nextTick(() => {
       this.fetchAIResults();
     });
+    // 優化 3：視窗縮放監聽
     window.addEventListener('resize', this.refreshBoxes);
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.refreshBoxes);
   },
-  methods: { // <--- 確保所有方法都寫在這個 methods 物件內
-    // 1. 核心辨識結果抓取：對接 /manager-api/ 路徑
+  methods: {
     async fetchAIResults() {
       this.loading = true;
       this.isDemoMode = false;
       const token = localStorage.getItem('userToken');
       try {
-        // 對接後端正式環境路徑，並延長逾時時間至 30 秒以應對 Azure 冷啟動
-        const response = await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize`, {}, {
+        const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
           headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 30000 
+          timeout: 30000 // 配合 main.js 延長至 30 秒
         });
         
-        // 修正邏輯：若回傳空資料或失敗，則自動啟動 Demo 模式
         if (response.data && response.data.length > 0) {
           this.rawResults = response.data;
         } else {
           this.loadMockData(); 
         }
       } catch (err) {
-        console.warn('API 抓取失敗或逾時，進入示範模式', err);
+        console.warn('API 抓取失敗，啟動多樣化示範模式', err);
         this.loadMockData(); 
       } finally {
         this.processData();
@@ -55,21 +110,27 @@ export default {
       }
     },
 
+    // 優化 2：增加多張圖片使 Demo 更豐富
     loadMockData() {
       this.isDemoMode = true;
-      const baseUrl = process.env.BASE_URL || './';
-      // 使用穩定圖源進行示範，確保容器能撐開並正確顯示橘框
-      this.rawResults = [{
-        "resident_id": "3",
-        "resident_name": "唐伯虎",
-        "confidence": 0.56,
-        "photos": [{
-          "photo_id": 999,
-          // 若本地圖片 activity2.png 抓不到，改用線上穩定圖源測試
-          "photo_url": "https://picsum.photos/id/237/800/600", 
-          "bounding_box": [150, 200, 450, 500] // [top, left, bottom, right]
-        }]
-      }];
+      this.rawResults = [
+        {
+          "resident_id": "3",
+          "resident_name": "唐伯虎",
+          "confidence": 0.92,
+          "photos": [
+            { "photo_id": 999, "photo_url": "https://picsum.photos/id/237/800/600", "bounding_box": [150, 200, 450, 500] }
+          ]
+        },
+        {
+          "resident_id": "5",
+          "resident_name": "秋香",
+          "confidence": 0.88,
+          "photos": [
+            { "photo_id": 888, "photo_url": "https://picsum.photos/id/1025/800/600", "bounding_box": [100, 300, 400, 600] }
+          ]
+        }
+      ];
     },
 
     processData() {
@@ -83,7 +144,7 @@ export default {
             resident_id: person.resident_id,
             resident_name: person.resident_name,
             confidence: person.confidence,
-            rawBox: pic.bounding_box, // [top, left, bottom, right] 格式
+            rawBox: pic.bounding_box,
             boxStyle: {},
             isEdited: false 
           });
@@ -100,7 +161,6 @@ export default {
         
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 精準座標縮放計算
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
 
@@ -117,6 +177,13 @@ export default {
       });
     },
 
+    refreshBoxes() {
+      // 優化 3：加入緩衝時間，避免視窗縮放過程不斷計算導致卡頓
+      setTimeout(() => {
+        this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
+      }, 200);
+    },
+
     async openCorrectionDialog(det) {
       this.currentDet = det;
       this.selectedResidentId = det.resident_id;
@@ -129,7 +196,7 @@ export default {
     async fetchAllResidents() {
       try {
         const token = localStorage.getItem('userToken');
-        const res = await this.$http.get('/manager-api/Resident', {
+        const res = await this.$http.get('/Resident', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         this.allResidents = res.data;
@@ -151,39 +218,38 @@ export default {
 
     async handleConfirm() {
       try {
-        await this.$confirm('確認目前所有辨識結果正確並正式同步至資料庫嗎？', '人工審核確認', {
-          confirmButtonText: '確定存檔',
-          type: 'success'
-        });
-
+        await this.$confirm('確認所有辨識結果正確嗎？', '存檔確認', { type: 'success' });
         this.submitting = true;
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
-            payload.push({
-              photo_id: photo.photo_id,
-              resident_id: det.resident_id
-            });
+            payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
           });
         });
-
         const token = localStorage.getItem('userToken');
-        await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize/confirm`, payload, {
+        await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-
-        this.$message.success('辨識結果已正式入庫！');
+        this.$message.success('辨識結果已同步！');
         this.$emit('go-back');
       } catch (error) {
         if (error !== 'cancel') this.$message.error('儲存失敗');
       } finally {
         this.submitting = false;
       }
-    },
-
-    refreshBoxes() {
-      this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
     }
-  } // <--- methods 結束
-}; // <--- export default 結束
+  }
+};
 </script>
+
+<style scoped>
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }
+.image-wrapper { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.recognition-image { width: 100%; display: block; }
+.face-box { position: absolute; border: 3px solid #FF9933; background-color: rgba(255, 153, 51, 0.1); cursor: pointer; transition: all 0.3s; }
+.face-box:hover { border-color: #f56c6c; background-color: rgba(245, 108, 108, 0.2); }
+.name-label { position: absolute; top: -28px; left: -3px; background: #FF9933; color: white; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 4px 4px 0 0; }
+.name-label.is-edited { background: #409EFF; }
+.action-bar { margin-top: 30px; text-align: center; }
+.demo-badge { margin-left: 20px; }
+</style>
