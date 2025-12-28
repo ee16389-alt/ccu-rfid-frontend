@@ -19,7 +19,7 @@
       
       <p class="status-text">
         <i :class="loading ? 'el-icon-loading' : 'el-icon-place'"></i>
-        {{ loading ? '正在讀取您的珍貴回憶...' : '等待感應中' }}
+        {{ loading ? `正在讀取您的珍貴回憶... (${countdown}s)` : '等待感應中' }}
       </p>
 
       <el-button 
@@ -29,7 +29,7 @@
         :loading="loading"
         :disabled="!hasToken"
       >
-        {{ loading ? '讀取中' : '開始感應' }}
+        {{ loading ? '請刷卡...' : '開始感應' }}
       </el-button>
     </div>
 
@@ -43,6 +43,15 @@
         </div>
       </transition>
     </div>
+
+    <input
+      class="rfid-input"
+      ref="rfidInput"
+      v-model="scanBuffer"
+      @keydown.enter.prevent="onScanComplete"
+      type="text"
+      autocomplete="off"
+    />
   </div>
 </template>
 
@@ -52,79 +61,127 @@ export default {
   data() {
     return {
       loading: false,
-      hasToken: !!localStorage.getItem('userToken')
+      hasToken: !!localStorage.getItem('userToken'),
+      scanBuffer: '',
+      scanTimer: null,
+      countdown: 3,
+      countdownTimer: null
     };
   },
   methods: {
+    // 啟動感應流程
     async handleStart() {
-      // 1. 安全性檢查：確保行政端已登入
       const token = localStorage.getItem('userToken');
-      
       if (!token) {
-        this.$message({
-          message: '【權限錯誤】請先由行政管理端完成登入驗證',
-          type: 'error',
-          duration: 4000
-        });
+        this.$message.error('【權限錯誤】請先由行政管理端完成登入驗證');
         return;
       }
 
       this.loading = true;
-      // 使用同學測試用的卡號
-      const cardUid = "116A2434"; 
+      this.scanBuffer = '';
+      this.countdown = 3;
 
+      // 自動聚焦到隱藏輸入框，準備接收刷卡器訊號
+      this.$nextTick(() => {
+        if (this.$refs.rfidInput) this.$refs.rfidInput.focus();
+      });
+
+      // 啟動倒數計時 UI
+      this.countdownTimer = setInterval(() => {
+        if (this.countdown > 1) {
+          this.countdown--;
+        }
+      }, 1000);
+
+      // 若 3 秒內未偵測到回車訊號（刷卡），自動轉入 Demo 模式
+      this.scanTimer = setTimeout(() => {
+        if (this.loading) {
+          this.enterDemoMode();
+        }
+      }, 3000);
+    },
+
+    // 接收到感應器傳回的 Enter 訊號
+    async onScanComplete() {
+      clearTimeout(this.scanTimer);
+      clearInterval(this.countdownTimer);
+
+      const cardUid = this.scanBuffer.trim();
+      this.scanBuffer = '';
+
+      if (!cardUid) {
+        this.enterDemoMode();
+        return;
+      }
+
+      await this.processRfid(cardUid);
+    },
+
+    // 處理 RFID 查詢邏輯
+    async processRfid(cardUid) {
       try {
-        // 2. 呼叫後端 API，根據 Swagger 規範獲取資料
-        // 此處會回傳 match 與新增的 activitys 陣列
+        // 使用統整後的正式 API 路徑
         const response = await this.$http.get(`/manager-api/rfid/${cardUid}`);
 
-        // 3. 解析感應結果
         if (response.data.match && response.data.match.length > 0) {
           const target = response.data.match[0];
-          
+
           this.$notify({
             title: '感應成功',
-            message: `${target.name} 您好，歡迎回到時光機！`,
+            // 整合身分判斷訊息
+            message: target.type === 'subject' 
+              ? `${target.name} 您好，歡迎回到時光機！` 
+              : `請觀賞 ${target.name} 活動相簿`,
             type: 'success',
             position: 'top-left'
           });
 
-          // 延遲跳轉，並將完整的資料（含活動清單）傳給父組件
+          // 延遲跳轉並傳遞完整活動清單
           setTimeout(() => {
             this.$emit('scan-success', {
               rfid: cardUid,
               match: target,
-              activities: response.data.activitys || [] // 傳遞活動清單
+              activities: response.data.activitys || []
             });
           }, 1000);
         } else {
           this.$message.warning('查無此卡片資料，請聯絡管理員登記');
+          this.loading = false;
         }
       } catch (error) {
-        // 4. Demo 模式：連線失敗時啟動示範路徑
-        console.warn("API 未連線，啟動示範模式", error);
-        this.$message({
-          message: '【Demo 模式】歡迎回來，唐伯虎先生！',
-          type: 'warning'
-        });
-        
-        setTimeout(() => {
-          this.$emit('scan-success', {
-            rfid: '8A303053',
-            match: { type: 'subject', name: '唐伯虎', id: '9527' },
-            activities: [] 
-          }); 
-        }, 1500);
-      } finally {
-        this.loading = false;
+        console.warn('API 錯誤或未連線，轉入 Demo', error);
+        this.enterDemoMode();
       }
+    },
+
+    // 示範模式處理
+    enterDemoMode() {
+      clearTimeout(this.scanTimer);
+      clearInterval(this.countdownTimer);
+      this.loading = false;
+
+      this.$message({
+        message: '【Demo 模式】歡迎回來，唐伯虎先生！',
+        type: 'warning'
+      });
+
+      setTimeout(() => {
+        this.$emit('scan-success', {
+          rfid: '116A2434',
+          match: { type: 'subject', name: '唐伯虎', id: '9527' },
+          activities: []
+        });
+      }, 1200);
     }
+  },
+  beforeDestroy() {
+    clearTimeout(this.scanTimer);
+    clearInterval(this.countdownTimer);
   }
 };
 </script>
 
 <style scoped>
-/* 樣式部分保持不變，維持精美的橘色呼吸感 */
 .landing-container { 
   display: flex; flex-direction: column; align-items: center; justify-content: center; 
   min-height: 100vh; background: radial-gradient(circle at center, #fffaf5 0%, #f7f1e9 100%);
@@ -196,5 +253,14 @@ export default {
   margin-top: 15px; color: #f56c6c; font-size: 14px; font-weight: bold; 
   background: rgba(245, 108, 108, 0.1); padding: 8px 20px; border-radius: 20px;
   display: inline-block;
+}
+
+/* 隱藏 Input 樣式 */
+.rfid-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
 }
 </style>

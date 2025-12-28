@@ -87,23 +87,23 @@ export default {
     this.stopTimer();
   },
   methods: {
-    // 核心對接：統一呼叫帶有 rfid 的 API
+    // 核心對接：優先測試同學提供的 /api/ 路徑
     async fetchPhotos() {
       this.loading = true;
       const token = localStorage.getItem('userToken');
       
       try {
-        // 使用 Query String 格式：/activities/{id}/photos?rfid={rfid}
-        const res = await this.$http.get(`/manager-api/activities/${this.activityId}/photos`, {
-          params: { rfid: this.rfid_uid }, // axios 會自動處理成 ?rfid=...
+        // 採用同學修正後的路徑，但保留您的 RFID 篩選參數
+        const res = await this.$http.get(`/api/activities/${this.activityId}/photos`, {
+          params: { rfid: this.rfid_uid },
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        // 檢查 API 回傳的照片欄位
+        // 檢查 API 回傳的照片欄位，並進行欄位容錯映射
         if (res.data.photos && res.data.photos.length > 0) {
           this.photoList = res.data.photos.map(p => ({
             id: p.id || p.photo_id,
-            url: p.image_url || p.photo_url, // 對接後端 image_url 欄位
+            url: p.image_url || p.photo_url, 
             taken_at: p.taken_at
           }));
           this.activityName = res.data.activity_title || `活動編號 #${this.activityId}`;
@@ -111,7 +111,7 @@ export default {
           this.loadMockPhotos(); 
         }
       } catch (err) {
-        console.warn('照片抓取失敗，啟動示範模式');
+        console.warn('API 抓取照片失敗 (測試 /api/ 路徑)，切換至示範模式');
         this.loadMockPhotos(); 
       } finally {
         this.loading = false;
@@ -134,7 +134,7 @@ export default {
         if (this.isPlaying && this.photoList.length > 1) {
           this.nextPhoto();
         }
-      }, 6000); // 每一張照片停留 6 秒，適合長者觀賞速度
+      }, 6000); // 每一張照片停留 6 秒
     },
     stopTimer() {
       if (this.timer) clearInterval(this.timer);
@@ -156,7 +156,7 @@ export default {
 </script>
 
 <style scoped>
-/* 沉浸式播放樣式 */
+/* 沉浸式播放樣式保持不變 */
 .slideshow-container { padding: 40px 20px; max-width: 1200px; margin: 0 auto; background-color: #fffaf5; min-height: 100vh; }
 .header-playback { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25px; }
 .main-title { font-size: 36px; color: #5d5146; font-weight: 800; margin: 0; }
@@ -173,7 +173,6 @@ export default {
 .current-photo-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
 .main-photo { width: 100%; height: 100%; }
 
-/* 照片淡入淡出動畫 */
 .photo-fade-enter-active, .photo-fade-leave-active { transition: opacity 1.2s ease; }
 .photo-fade-enter, .photo-fade-leave-to { opacity: 0; }
 
