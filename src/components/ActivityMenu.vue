@@ -2,33 +2,31 @@
   <div class="activity-menu-container">
     <div class="header-playback">
       <h1 class="main-title">回憶照片牆</h1>
-      <el-button 
-        type="warning" 
-        @click="handleBack"
-        class="back-button"
-      >
-        返回
-      </el-button>
+      <el-tag v-if="residentName" type="warning" effect="dark" class="identity-tag">
+        <i class="el-icon-user"></i> 歡迎：{{ residentName }}
+      </el-tag>
+      <el-button type="warning" @click="handleBack" class="back-button">返回</el-button>
     </div>
 
-    <p class="prompt-text">點選照片即可開始播放</p>
+    <p class="prompt-text">點選活動封面即可開始播放您的精彩回憶</p>
 
-    <el-row :gutter="20">
-      <el-col 
-        :span="8" 
-        v-for="activity in activityList" 
-        :key="activity.id" 
-        class="activity-col"
-      >
-        <el-card 
-          shadow="hover" 
-          class="activity-card" 
-          @click.native="handleSelectActivity(activity)"
-        >
+    <el-row :gutter="30" v-loading="loading">
+      <el-col :span="8" v-for="activity in activityList" :key="activity.id" class="activity-col">
+        <el-card shadow="hover" class="activity-card" @click.native="handleSelectActivity(activity)">
           <div class="activity-content">
-            <div class="image-placeholder">
-              </div>
-            <p class="activity-name">{{ activity.name }} • {{ activity.date }}</p>
+            <el-image 
+              :src="activity.cover || getDefaultCover()" 
+              class="activity-image"
+              fit="cover"
+            >
+              </el-image>
+            <div class="activity-info">
+              <p class="activity-name">{{ activity.name }}</p>
+              <p class="activity-date">
+                <i class="el-icon-date"></i> {{ activity.date }} 
+                <span v-if="activity.photoCount"> ({{ activity.photoCount }}張)</span>
+              </p>
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -39,61 +37,73 @@
 <script>
 export default {
   name: 'ActivityMenu',
-  props: ['residentId'],
+  props: ['rfid_uid'], // 改為接收 RFID 序號以供 API 查詢
   data() {
     return {
-      // 統一使用 activityList 以對應 template
+      loading: false,
+      residentName: '', // 用來儲存長輩姓名
       activityList: []
     };
   },
   mounted() {
-    this.fetchResidentActivities();
+    if (this.rfid_uid) {
+      this.fetchDataByRfid();
+    } else {
+      this.loadMockActivities();
+    }
   },
   methods: {
-    fetchResidentActivities() {
-      // 1. 從 localStorage 提取登入時存入的 Token
-      const token = localStorage.getItem('userToken');
-
-      if (!token) {
-        this.$message.warning('尚未偵測到登入憑證，請先登入');
-        return;
-      }
-
-      // 2. 呼叫活動 API，並在 Header 帶上 Authorization
-      // 提示：若後端支援，可改為 `/manager-api/Activity?residentId=${this.residentId}`
-      this.$http.get('/manager-api/Activity', {
-        headers: {
-          'Authorization': `Bearer ${token}` // 標準 JWT 格式
-        }
-      })
-        .then(response => {
-          // 3. 將 API 回傳資料映射至前端顯示格式
-          this.activityList = response.data.map(item => ({
-            id: item.id,
-            name: item.title || '精彩活動',
-            date: item.activity_at ? item.activity_at.split('T')[0] : '無日期',
-            photoCount: item.photo_count || 0
-          }));
-          this.$message.success('照片牆載入成功');
-        })
-        .catch(error => {
-          console.error("載入照片牆失敗:", error);
-          // 4. 針對 CORS 或 401 進行錯誤提示
-          if (error.response && error.response.status === 401) {
-            this.$message.error('驗證失敗，請重新登入');
-          } else {
-            this.$message.error('無法取得活動資料，請確認 API 連線與 CORS 設定');
-          }
-        });
+    getDefaultCover() {
+      return 'https://images.unsplash.com/photo-1516733725897-1aa73b87c8e8?w=600';
     },
-    // 修正：方法名稱與 template 的 @click.native 保持一致
+
+    // 核心對接：使用同學調整後的 api/rfid/{rfid}
+    async fetchDataByRfid() {
+      this.loading = true;
+      try {
+        const response = await this.$http.get(`/manager-api/rfid/${this.rfid_uid}`);
+        
+        // 1. 處理 match 陣列資訊
+        if (response.data.match && response.data.match.length > 0) {
+          const matchInfo = response.data.match[0];
+          this.residentName = matchInfo.name; // 取得長輩姓名
+        }
+
+        // 2. 渲染 activitys 清單
+        if (response.data.activitys && response.data.activitys.length > 0) {
+          this.activityList = response.data.activitys.map(item => ({
+            id: item.id,
+            name: item.title,
+            date: item.activity_at,
+            cover: item.cover,
+            photoCount: item.photo_count
+          }));
+        } else {
+          this.$message.info('目前尚無相關活動照片');
+        }
+      } catch (error) {
+        console.error("RFID 查詢失敗", error);
+        this.loadMockActivities();
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    loadMockActivities() {
+      this.activityList = [
+        { id: '2', name: '象棋大賽', date: '2025-12-18', photoCount: 6, cover: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600' },
+        { id: '7', name: '話劇表演', date: '2025-12-24', photoCount: 2, cover: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?w=600' }
+      ];
+    },
+
     handleSelectActivity(activity) {
-      this.$message.success(`即將播放：${activity.name}`);
-      // 發送事件給父元件切換至 Frame 3 (Slideshow)
-      this.$emit('select-activity', activity.id);
+      // 傳遞活動 ID 以及當前的 RFID 序號，以便下一頁過濾照片
+      this.$emit('select-activity', {
+        activityId: activity.id,
+        rfid: this.rfid_uid
+      });
     },
     handleBack() {
-      // 發送回上一頁的事件
       this.$emit('go-back');
     }
   }
@@ -101,72 +111,18 @@ export default {
 </script>
 
 <style scoped>
-.activity-menu-container {
-    padding: 20px;
-    background-color: #fffaf5; /* 輕微背景色提升質感 */
-    min-height: 100vh;
-}
-
-.header-playback {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #f0e6da;
-    padding-bottom: 15px;
-}
-
-.main-title {
-    font-size: 24px;
-    color: #5a5a5a;
-    margin: 0;
-}
-
-.prompt-text {
-    color: #909399;
-    margin-bottom: 20px;
-}
-
-.activity-col {
-    margin-bottom: 25px;
-}
-
-.activity-card {
-    border-radius: 15px;
-    border: 1px solid #f0e6da;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    transition: transform 0.2s, box-shadow 0.2s;
-    background-color: #ffffff;
-}
-
-.activity-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(255, 153, 51, 0.2);
-    border-color: #FF9933;
-}
-
-.image-placeholder {
-    width: 100%;
-    padding-top: 60%;
-    background-color: #f0e6da;
-    background-image: linear-gradient(45deg, #f0e6da 25%, #f7f0e8 25%, #f7f0e8 50%, #f0e6da 50%, #f0e6da 75%, #f7f0e8 75%, #f7f0e8 100%);
-    background-size: 20px 20px;
-    border-radius: 10px;
-    margin-bottom: 15px;
-}
-
-.activity-name {
-    text-align: center;
-    font-weight: bold;
-    color: #606266;
-    margin: 10px 0;
-}
-
-.back-button {
-    background-color: #FF9933;
-    border-color: #FF9933;
-    color: white;
-    font-weight: bold;
-}
+/* 樣式部分微調：加入身分標籤樣式 */
+.identity-tag { font-size: 18px; padding: 10px 20px; border-radius: 15px; margin-right: auto; margin-left: 20px; }
+/* ... 其餘樣式保持不變 ... */
+.activity-menu-container { padding: 40px; background-color: #fffaf5; min-height: 100vh; }
+.header-playback { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 3px solid #f0e6da; padding-bottom: 20px; }
+.main-title { font-size: 32px; color: #5d5146; font-weight: bold; }
+.prompt-text { color: #8c7e71; font-size: 18px; margin-bottom: 40px; }
+.activity-card { border-radius: 24px; cursor: pointer; transition: all 0.3s ease; border: none; overflow: hidden; background: white; }
+.activity-card:hover { transform: translateY(-12px); box-shadow: 0 15px 30px rgba(255, 153, 51, 0.15); }
+.activity-image { width: 100%; height: 240px; border-bottom: 1px solid #eee; }
+.activity-info { padding: 20px; text-align: center; }
+.activity-name { font-size: 20px; font-weight: bold; color: #333; margin: 0 0 8px 0; }
+.activity-date { font-size: 16px; color: #909399; margin: 0; }
+.back-button { background-color: #FF9933; border-color: #FF9933; color: white; font-weight: bold; padding: 12px 30px; border-radius: 25px; font-size: 18px; }
 </style>

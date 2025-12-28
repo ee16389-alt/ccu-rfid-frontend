@@ -2,9 +2,9 @@
   <div id="app">
     <div v-if="debugMode" class="debug-toolbar">
       <el-tag type="info" size="small">開發者工具</el-tag>
-      <el-button @click="currentView = 'RFIDLanding'" size="mini" type="success">長者端(0)</el-button>
-      <el-button @click="currentView = 'Login'" size="mini" type="primary">管理端(4)</el-button>
-      <el-button @click="debugMode = false" size="mini">隱藏</el-button>
+      <el-button @click="currentView = 'RFIDLanding'" size="mini" type="success">長者端 (首頁)</el-button>
+      <el-button @click="currentView = 'Login'" size="mini" type="primary">行政管理端</el-button>
+      <el-button @click="debugMode = false" size="mini">隱藏工具列</el-button>
     </div>
 
     <div class="container">
@@ -15,14 +15,14 @@
 
       <ActivityMenu 
         v-else-if="currentView === 'ActivityMenu'" 
-        :residentId="selectedResidentId"
+        :rfid_uid="selectedRfid"
         @select-activity="onSelectActivity"
         @go-back="currentView = 'RFIDLanding'"
       />
 
       <Slideshow 
         v-else-if="currentView === 'Slideshow'" 
-        :residentId="selectedResidentId"
+        :rfid_uid="selectedRfid" 
         :activityId="selectedActivityId"
         @go-back="currentView = 'ActivityMenu'"
       />
@@ -35,14 +35,21 @@
       <ActivityList 
         v-else-if="currentView === 'ActivityList'" 
         @manage-activity="onManageActivity"
-        @add-activity="currentView = 'ActivityManage'"
+        @add-activity="onAddActivity" 
       />
 
       <ActivityManage 
         v-else-if="currentView === 'ActivityManage'" 
         :selectedActivity="activeActivityObject"
         @go-back="currentView = 'ActivityList'"
-        @go-screening="currentView = 'AIScreening'"
+        @go-screening="currentView = 'AIScreening'" 
+        @go-recognition="currentView = 'AIRecognition'"
+      />
+
+      <AIRecognitionView 
+        v-else-if="currentView === 'AIRecognition'" 
+        :activityId="selectedActivityId"
+        @go-back="currentView = 'ActivityManage'"
       />
 
       <AIScreening 
@@ -54,6 +61,7 @@
       <ElderList 
         v-else-if="currentView === 'ElderList'" 
         @edit-elder="onEditElder"
+        @add-elder="onAddElder"
       />
 
       <ElderEdit 
@@ -62,19 +70,21 @@
         @go-back="currentView = 'ElderList'"
       />
       
-      <p v-else style="text-align: center;">系統載入中...</p>
+      <p v-else style="text-align: center; margin-top: 50px;">
+        <i class="el-icon-loading"></i> 系統正在準備中...
+      </p>
     </div>
 
     <div v-if="isAdminView" class="admin-nav">
-      <el-button @click="currentView = 'ActivityList'" icon="el-icon-s-order">活動</el-button>
-      <el-button @click="currentView = 'ElderList'" icon="el-icon-user-solid">長者</el-button>
-      <el-button @click="logout" type="text" style="color: #909399;">登出</el-button>
+      <el-button @click="currentView = 'ActivityList'" icon="el-icon-s-order">活動列表</el-button>
+      <el-button @click="currentView = 'ElderList'" icon="el-icon-user-solid">長者管理</el-button>
+      <el-button @click="logout" type="text" style="color: #F56C6C;">安全登出</el-button>
     </div>
   </div>
 </template>
 
 <script>
-// 引入所有組件
+// 組件引入保持不變 ...
 import RFIDLanding from './components/RFIDLanding.vue';
 import ActivityMenu from './components/ActivityMenu.vue';
 import Slideshow from './components/Slideshow.vue';
@@ -84,96 +94,70 @@ import ElderList from './components/ElderList.vue';
 import ElderEdit from './components/ElderEdit.vue';
 import AIScreening from './components/AIScreening.vue';
 import ActivityManage from './components/ActivityManage.vue';
+import AIRecognitionView from './components/AIRecognitionView.vue';
 
 export default {
   name: 'App',
   components: {
     RFIDLanding, ActivityMenu, Slideshow, Login,
-    ActivityList, ElderList, ElderEdit, AIScreening, ActivityManage
+    ActivityList, ElderList, ElderEdit, AIScreening, ActivityManage,
+    AIRecognitionView
   },
   data() {
     return {
       currentView: 'RFIDLanding',
       debugMode: true,
-      selectedResidentId: null, // 暫存長者 ID
-      selectedActivityId: null, // 暫存活動 ID
-      activeActivityObject: null // 傳遞給管理頁面的物件
+      selectedRfid: null, // 改為追蹤選中的 RFID 序號
+      selectedResidentId: null, // 用於行政端的編輯 ID
+      selectedActivityId: null,
+      activeActivityObject: null 
     };
   },
   computed: {
-    // 判斷目前是否在後台管理頁面
     isAdminView() {
-      const adminPages = ['ActivityList', 'ElderList', 'ActivityManage', 'ElderEdit', 'AIScreening'];
+      const adminPages = ['ActivityList', 'ElderList', 'ActivityManage', 'ElderEdit', 'AIScreening', 'AIRecognition'];
       return adminPages.includes(this.currentView);
     }
   },
   methods: {
-    // 處理長者感應成功
-    onScanSuccess(id) {
-      this.selectedResidentId = id;
+    // 當 RFID 感應成功時
+    onScanSuccess(rfid) {
+      this.selectedRfid = rfid;
       this.currentView = 'ActivityMenu';
     },
-    // 處理選擇播放活動
-    onSelectActivity(id) {
-      this.selectedActivityId = id;
+    // 當選擇特定活動回憶時
+    onSelectActivity(payload) {
+      this.selectedActivityId = payload.activityId;
+      this.selectedRfid = payload.rfid; // 再次確認 RFID 傳遞
       this.currentView = 'Slideshow';
     },
-    // 處理點擊活動管理
+    // 行政端：管理活動
     onManageActivity(id) {
       this.selectedActivityId = id;
-      this.activeActivityObject = { id: id, name: '載入中...' };
+      this.activeActivityObject = { id: id }; 
       this.currentView = 'ActivityManage';
     },
-    // 處理點擊編輯長者
+    // 行政端：建立活動
+    onAddActivity() {
+      this.selectedActivityId = null;
+      this.activeActivityObject = null; 
+      this.currentView = 'ActivityManage';
+    },
+    // 行政端：編輯長者
     onEditElder(id) {
       this.selectedResidentId = id;
       this.currentView = 'ElderEdit';
     },
-    // 登出並清除 Token
+    // 行政端：新增長者
+    onAddElder() {
+      this.selectedResidentId = null;
+      this.currentView = 'ElderEdit';
+    },
     logout() {
       localStorage.removeItem('userToken');
       this.currentView = 'Login';
+      this.$message.info('已安全登出');
     }
   }
 };
 </script>
-
-<style>
-#app {
-  font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
-  min-height: 100vh;
-  background-color: #f7f3ed;
-}
-
-.debug-toolbar {
-  padding: 8px;
-  background: #333;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  overflow-x: auto;
-}
-
-.container {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.admin-nav {
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  background: #ffffff;
-  display: flex;
-  justify-content: space-around;
-  padding: 10px 0;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-  z-index: 1000;
-}
-
-/* 移除 Element UI 預設按鈕間距 */
-.admin-nav .el-button + .el-button {
-  margin-left: 0;
-}
-</style>
