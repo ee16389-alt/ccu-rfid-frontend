@@ -18,6 +18,7 @@ export default {
   },
   // 確保生命週期內正確呼叫方法
   mounted() {
+    // 使用 nextTick 確保組件實例已完全就緒
     this.$nextTick(() => {
       this.fetchAIResults();
     });
@@ -58,9 +59,9 @@ export default {
       const baseUrl = process.env.BASE_URL;
       // 模擬後端回傳格式，確保 Demo 時也能看見人臉框
       this.rawResults = [{
-        "resident_id": "26",
-        "resident_name": "孫秋香",
-        "confidence": 0.71,
+        "resident_id": "3",
+        "resident_name": "唐伯虎",
+        "confidence": 0.56,
         "photos": [{
           "photo_id": 54,
           "photo_url": `${baseUrl}slideshow/activity2.png`, 
@@ -166,6 +167,7 @@ export default {
         });
 
         const token = localStorage.getItem('userToken');
+        // 對接 Swagger 確認存檔路徑
         await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize/confirm`, payload, {
           headers: { 'Authorization': `Bearer ${token}` }
         });

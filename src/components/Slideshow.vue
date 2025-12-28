@@ -67,7 +67,7 @@
 <script>
 export default {
   name: 'Slideshow',
-  // 接收活動 ID 與 RFID 序號以供統一路徑查詢
+  // 接收活動 ID 與來自感應頁面的 RFID 序號
   props: ['activityId', 'rfid_uid'],
   data() {
     return {
@@ -93,13 +93,13 @@ export default {
       const token = localStorage.getItem('userToken');
       
       try {
-        // 採用同學修正後的路徑，但保留您的 RFID 篩選參數
+        // 解決 404 問題：測試 /api/ 路徑並帶入 RFID 參數
         const res = await this.$http.get(`/api/activities/${this.activityId}/photos`, {
-          params: { rfid: this.rfid_uid },
+          params: { rfid: this.rfid_uid }, // 精準篩選長輩照片
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        // 檢查 API 回傳的照片欄位，並進行欄位容錯映射
+        // 欄位容錯映射
         if (res.data.photos && res.data.photos.length > 0) {
           this.photoList = res.data.photos.map(p => ({
             id: p.id || p.photo_id,
@@ -111,7 +111,8 @@ export default {
           this.loadMockPhotos(); 
         }
       } catch (err) {
-        console.warn('API 抓取照片失敗 (測試 /api/ 路徑)，切換至示範模式');
+        // 若出現 404 (Not Found) 則記錄警告並進入示範模式
+        console.warn('API 抓取照片失敗 (測試 /api/ 路徑)，啟動示範模式');
         this.loadMockPhotos(); 
       } finally {
         this.loading = false;
@@ -120,7 +121,7 @@ export default {
 
     loadMockPhotos() {
       this.activityName = '時光記憶精選 (示範模式)';
-      const baseUrl = process.env.BASE_URL;
+      const baseUrl = process.env.BASE_URL || './';
       this.photoList = [
         { url: `${baseUrl}slideshow/activity1.png` }, 
         { url: `${baseUrl}slideshow/activity2.png` }, 
@@ -134,7 +135,7 @@ export default {
         if (this.isPlaying && this.photoList.length > 1) {
           this.nextPhoto();
         }
-      }, 6000); // 每一張照片停留 6 秒
+      }, 6000); // 長者觀賞建議停留 6 秒
     },
     stopTimer() {
       if (this.timer) clearInterval(this.timer);
@@ -154,53 +155,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-/* 沉浸式播放樣式保持不變 */
-.slideshow-container { padding: 40px 20px; max-width: 1200px; margin: 0 auto; background-color: #fffaf5; min-height: 100vh; }
-.header-playback { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25px; }
-.main-title { font-size: 36px; color: #5d5146; font-weight: 800; margin: 0; }
-.activity-info { font-size: 20px; color: #9a8c7d; margin-top: 8px; display: block; }
-.activity-info i { color: #FF9933; margin-right: 8px; }
-
-.slideshow-area {
-  height: 650px; border-radius: 40px; background-color: #1a1a1a; 
-  display: flex; align-items: center; border: 12px solid #fff;
-  box-shadow: 0 30px 60px rgba(93, 81, 70, 0.2) !important; overflow: hidden;
-}
-
-.photo-display { width: 100%; height: 100%; position: relative; }
-.current-photo-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-.main-photo { width: 100%; height: 100%; }
-
-.photo-fade-enter-active, .photo-fade-leave-active { transition: opacity 1.2s ease; }
-.photo-fade-enter, .photo-fade-leave-to { opacity: 0; }
-
-.nav-arrow {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  background-color: rgba(255, 255, 255, 0.2); color: white; width: 80px; height: 80px;
-  border-radius: 50%; display: flex; justify-content: center; align-items: center;
-  font-size: 40px; cursor: pointer; z-index: 10; transition: 0.4s;
-}
-.nav-arrow:hover { background-color: #FF9933; transform: translateY(-50%) scale(1.1); }
-.left-arrow { left: 30px; }
-.right-arrow { right: 30px; }
-
-.controls-bar { margin-top: 40px; display: flex; justify-content: center; }
-.control-panel { 
-  background: white; padding: 15px 40px; border-radius: 60px;
-  display: flex; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-}
-.play-btn { font-size: 30px; height: 60px; width: 60px; }
-.counter-badge { margin-left: 25px; font-weight: bold; }
-.current { font-size: 32px; color: #FF9933; }
-.separator { margin: 0 15px; color: #dcdfe6; font-size: 24px; }
-.total { font-size: 24px; color: #909399; }
-
-.back-button { 
-  background-color: #fff; border: 1px solid #dcdfe6; color: #606266;
-  font-weight: bold; padding: 12px 30px; border-radius: 20px; font-size: 18px;
-}
-.back-button:hover { background-color: #f56c6c; color: white; border-color: #f56c6c; }
-.image-loading, .image-error, .current-photo-placeholder { color: #fff; font-size: 20px; text-align: center; }
-</style>
