@@ -29,7 +29,7 @@
         :loading="loading"
         :disabled="!hasToken"
       >
-        {{ loading ? '讀取中' : '開始感應' }}
+        {{ loading ? `讀取中 ${ countdown } 秒` : '開始感應' }}
       </el-button>
     </div>
 
@@ -43,6 +43,14 @@
         </div>
       </transition>
     </div>
+    <input
+      class="rfid-input"
+      ref="rfidInput"
+      v-model="scanBuffer"
+      @keydown.enter.prevent="onScanComplete"
+      type="text"
+      autocomplete="off"
+    />
   </div>
 </template>
 
@@ -52,14 +60,16 @@ export default {
   data() {
     return {
       loading: false,
-      hasToken: !!localStorage.getItem('userToken')
+      hasToken: !!localStorage.getItem('userToken'),
+      scanBuffer: '',
+      scanTimer: null,
+      countdown: 3,
+      countdownTimer: null
     };
   },
   methods: {
     async handleStart() {
-      // 1. 安全性檢查：確保行政端已登入
       const token = localStorage.getItem('userToken');
-      
       if (!token) {
         this.$message({
           message: '【權限錯誤】請先由行政管理端完成登入驗證',
@@ -70,47 +80,86 @@ export default {
       }
 
       this.loading = true;
-      // 使用同學測試用的卡號
-      const cardUid = "116A2434"; 
+      this.scanBuffer = '';
 
+      // 初始化倒數
+      this.countdown = 3;
+
+      // focus 到隱藏 input
+      this.$nextTick(() => {
+        this.$refs.rfidInput.focus();
+      });
+
+      // 倒數計時器（UI）
+      this.countdownTimer = setInterval(() => {
+        if (this.countdown > 1) {
+          this.countdown--;
+        }
+      }, 1000);
+
+      // 3 秒內沒刷卡 → Demo 模式
+      this.scanTimer = setTimeout(() => {
+        if (this.loading) {
+          this.enterDemoMode();
+        }
+      }, 3000);
+    },
+
+    async onScanComplete() {
+      clearTimeout(this.scanTimer);
+
+      const cardUid = this.scanBuffer.trim();
+      this.scanBuffer = '';
+
+      if (!cardUid) {
+        this.enterDemoMode();
+        return;
+      }
+
+      await this.processRfid(cardUid);
+    },
+
+    async processRfid(cardUid) {
       try {
-        // 2. 呼叫後端 API，使用 axios 實例
-        // 注意：這裡改用您 main.js 設定的 $http
         const response = await this.$http.get(`/api/rfid/${cardUid}`);
 
-        // 3. 解析同學提供的 match 格式
         if (response.data.match && response.data.match.length > 0) {
           const target = response.data.match[0];
-          
+
           this.$notify({
             title: '感應成功',
-            message: `${target.name} 先生/女士，歡迎回到時光機！`,
+            message: target.type === 'subject' ? `${target.name} 先生/女士，歡迎回到時光機！` : `請觀賞 ${target.name} 活動相簿`,
             type: 'success',
             position: 'top-left'
           });
 
-          // 延遲跳轉
           setTimeout(() => {
             this.$emit('scan-success', cardUid);
           }, 1000);
         } else {
           this.$message.warning('查無此卡片資料，請聯絡管理員登記');
+          this.loading = false;
         }
       } catch (error) {
-        // 4. Demo 模式：連線失敗時啟動
-        console.warn("API 未連線，啟動唐伯虎示範模式", error);
-        this.$message({
-          message: '【Demo 模式】歡迎回來，唐伯虎先生！',
-          type: 'warning'
-        });
-        
-        setTimeout(() => {
-          this.$emit('scan-success', '8A303053'); 
-        }, 1500);
-      } finally {
-        this.loading = false;
+        console.warn('API 錯誤，轉 Demo', error);
+        this.enterDemoMode();
       }
-    }
+    },
+
+    enterDemoMode() {
+      clearTimeout(this.scanTimer);
+      clearInterval(this.countdownTimer);
+      this.loading = false;
+
+      this.$message({
+        message: '【Demo 模式】歡迎回來，唐伯虎先生！',
+        type: 'warning'
+      });
+
+      setTimeout(() => {
+        this.$emit('scan-success', '116A2434');
+      }, 1200);
+    },
   }
 };
 </script>
@@ -190,5 +239,13 @@ export default {
   margin-top: 15px; color: #f56c6c; font-size: 14px; font-weight: bold; 
   background: rgba(245, 108, 108, 0.1); padding: 8px 20px; border-radius: 20px;
   display: inline-block;
+}
+/* RFID input */
+.rfid-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
 }
 </style>
