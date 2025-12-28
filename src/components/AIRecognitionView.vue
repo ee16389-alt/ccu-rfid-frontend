@@ -79,7 +79,6 @@ export default {
     this.$nextTick(() => {
       this.fetchAIResults();
     });
-    // 優化 3：視窗縮放監聽
     window.addEventListener('resize', this.refreshBoxes);
   },
   beforeDestroy() {
@@ -93,7 +92,7 @@ export default {
       try {
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
           headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 30000 // 配合 main.js 延長至 30 秒
+          timeout: 30000 
         });
         
         if (response.data && response.data.length > 0) {
@@ -110,16 +109,18 @@ export default {
       }
     },
 
-    // 優化 2：增加多張圖片使 Demo 更豐富
     loadMockData() {
       this.isDemoMode = true;
+      // 使用您確認有效的 GitHub Pages 絕對路徑
+      const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
+      
       this.rawResults = [
         {
           "resident_id": "3",
           "resident_name": "唐伯虎",
           "confidence": 0.92,
           "photos": [
-            { "photo_id": 999, "photo_url": "https://picsum.photos/id/237/800/600", "bounding_box": [150, 200, 450, 500] }
+            { "photo_id": 999, "photo_url": stableImageUrl, "bounding_box": [150, 200, 450, 500] }
           ]
         },
         {
@@ -178,7 +179,7 @@ export default {
     },
 
     refreshBoxes() {
-      // 優化 3：加入緩衝時間，避免視窗縮放過程不斷計算導致卡頓
+      // 延遲計算以避開視窗縮放時的卡頓
       setTimeout(() => {
         this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
       }, 200);
