@@ -76,7 +76,7 @@ export default {
       try {
         // 2. 呼叫後端 API，使用 axios 實例
         // 注意：這裡改用您 main.js 設定的 $http
-        const response = await this.$http.get(`/manager-api/rfid/${cardUid}`);
+        const response = await this.$http.get(`/api/rfid/${cardUid}`);
 
         // 3. 解析同學提供的 match 格式
         if (response.data.match && response.data.match.length > 0) {

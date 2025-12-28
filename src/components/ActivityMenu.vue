@@ -61,7 +61,7 @@ export default {
     async fetchDataByRfid() {
       this.loading = true;
       try {
-        const response = await this.$http.get(`/manager-api/rfid/${this.rfid_uid}`);
+        const response = await this.$http.get(`/api/rfid/${this.rfid_uid}`);
         
         // 1. 處理 match 陣列資訊
         if (response.data.match && response.data.match.length > 0) {

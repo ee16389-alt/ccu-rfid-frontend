@@ -88,7 +88,7 @@ export default {
       try {
         // 對接同學調整後的「取得 RFID 活動照片」API
         // 路徑：/activities/{活動id}/photos?rfid={RFID號碼}
-        const res = await this.$http.get(`/manager-api/activities/${this.activityId}/photos`, {
+        const res = await this.$http.get(`/api/activities/${this.activityId}/photos`, {
           params: { rfid: this.rfid_uid },
           headers: { 'Authorization': `Bearer ${token}` }
         });
