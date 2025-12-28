@@ -74,38 +74,46 @@ export default {
       const cardUid = "116A2434"; 
 
       try {
-        // 2. 呼叫後端 API，使用 axios 實例
-        // 注意：這裡改用您 main.js 設定的 $http
+        // 2. 呼叫後端 API，根據 Swagger 規範獲取資料
+        // 此處會回傳 match 與新增的 activitys 陣列
         const response = await this.$http.get(`/manager-api/rfid/${cardUid}`);
 
-        // 3. 解析同學提供的 match 格式
+        // 3. 解析感應結果
         if (response.data.match && response.data.match.length > 0) {
           const target = response.data.match[0];
           
           this.$notify({
             title: '感應成功',
-            message: `${target.name} 先生/女士，歡迎回到時光機！`,
+            message: `${target.name} 您好，歡迎回到時光機！`,
             type: 'success',
             position: 'top-left'
           });
 
-          // 延遲跳轉
+          // 延遲跳轉，並將完整的資料（含活動清單）傳給父組件
           setTimeout(() => {
-            this.$emit('scan-success', cardUid);
+            this.$emit('scan-success', {
+              rfid: cardUid,
+              match: target,
+              activities: response.data.activitys || [] // 傳遞活動清單
+            });
           }, 1000);
         } else {
           this.$message.warning('查無此卡片資料，請聯絡管理員登記');
         }
       } catch (error) {
-        // 4. Demo 模式：連線失敗時啟動
-        console.warn("API 未連線，啟動唐伯虎示範模式", error);
+        // 4. Demo 模式：連線失敗時啟動示範路徑
+        console.warn("API 未連線，啟動示範模式", error);
         this.$message({
           message: '【Demo 模式】歡迎回來，唐伯虎先生！',
           type: 'warning'
         });
         
         setTimeout(() => {
-          this.$emit('scan-success', '8A303053'); 
+          this.$emit('scan-success', {
+            rfid: '8A303053',
+            match: { type: 'subject', name: '唐伯虎', id: '9527' },
+            activities: [] 
+          }); 
         }, 1500);
       } finally {
         this.loading = false;
@@ -116,7 +124,7 @@ export default {
 </script>
 
 <style scoped>
-/* 頁面容器與背景 */
+/* 樣式部分保持不變，維持精美的橘色呼吸感 */
 .landing-container { 
   display: flex; flex-direction: column; align-items: center; justify-content: center; 
   min-height: 100vh; background: radial-gradient(circle at center, #fffaf5 0%, #f7f1e9 100%);
@@ -134,7 +142,6 @@ export default {
 .main-title { font-size: 48px; color: #5d5146; margin: 0; font-weight: 800; letter-spacing: 4px; }
 .sub-title { font-size: 20px; color: #9a8c7d; margin: 15px 0 50px 0; }
 
-/* RFID 橘色圖示與掃描動畫 */
 .rfid-icon-wrapper { 
   position: relative; width: 280px; height: 280px; margin: 0 auto 50px auto;
   display: flex; justify-content: center; align-items: center;
@@ -159,7 +166,6 @@ export default {
   100% { top: 110%; }
 }
 
-/* 橘色擴散波紋 */
 .ripple {
   position: absolute; width: 100%; height: 100%; border: 2px solid #FF9933;
   border-radius: 50%; opacity: 0; animation: ripple-anim 3s infinite linear;

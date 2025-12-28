@@ -35,7 +35,7 @@
             <div v-else-if="loading" class="current-photo-placeholder">
               <i class="el-icon-loading"></i> 正在開啟時光機...
             </div>
-            <div v-else class="current-photo-placeholder">目前此活動尚無照片</div>
+            <div v-else class="current-photo-placeholder">目前此活動尚無相關照片</div>
           </transition>
         </div>
 
@@ -47,7 +47,13 @@
 
     <div class="controls-bar">
       <div class="control-panel">
-        <el-button :type="isPlaying ? 'info' : 'warning'" @click="togglePlay" circle class="play-btn" :icon="isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'"></el-button>
+        <el-button 
+          :type="isPlaying ? 'info' : 'warning'" 
+          @click="togglePlay" 
+          circle 
+          class="play-btn" 
+          :icon="isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'"
+        ></el-button>
         <div class="counter-badge">
           <span class="current">{{ photoList.length > 0 ? currentPhotoIndex + 1 : 0 }}</span>
           <span class="separator">/</span>
@@ -61,7 +67,7 @@
 <script>
 export default {
   name: 'Slideshow',
-  // 改為接收活動 ID 與 RFID 序號
+  // 接收活動 ID 與 RFID 序號以供統一路徑查詢
   props: ['activityId', 'rfid_uid'],
   data() {
     return {
@@ -81,31 +87,31 @@ export default {
     this.stopTimer();
   },
   methods: {
+    // 核心對接：統一呼叫帶有 rfid 的 API
     async fetchPhotos() {
       this.loading = true;
       const token = localStorage.getItem('userToken');
       
       try {
-        // 對接同學調整後的「取得 RFID 活動照片」API
-        // 路徑：/activities/{活動id}/photos?rfid={RFID號碼}
+        // 使用 Query String 格式：/activities/{id}/photos?rfid={rfid}
         const res = await this.$http.get(`/manager-api/activities/${this.activityId}/photos`, {
-          params: { rfid: this.rfid_uid },
+          params: { rfid: this.rfid_uid }, // axios 會自動處理成 ?rfid=...
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
+        // 檢查 API 回傳的照片欄位
         if (res.data.photos && res.data.photos.length > 0) {
-          // 映射 API 中的 image_url 至組件使用的 url 欄位
           this.photoList = res.data.photos.map(p => ({
-            id: p.id,
-            url: p.image_url,
+            id: p.id || p.photo_id,
+            url: p.image_url || p.photo_url, // 對接後端 image_url 欄位
             taken_at: p.taken_at
           }));
-          this.activityName = `活動 #${res.data.activity_id}`;
+          this.activityName = res.data.activity_title || `活動編號 #${this.activityId}`;
         } else {
-          this.loadMockPhotos();
+          this.loadMockPhotos(); 
         }
       } catch (err) {
-        console.warn('API 抓取照片失敗，啟動示範模式');
+        console.warn('照片抓取失敗，啟動示範模式');
         this.loadMockPhotos(); 
       } finally {
         this.loading = false;
@@ -113,7 +119,7 @@ export default {
     },
 
     loadMockPhotos() {
-      this.activityName = '養老院生活精彩回顧 (示範模式)';
+      this.activityName = '時光記憶精選 (示範模式)';
       const baseUrl = process.env.BASE_URL;
       this.photoList = [
         { url: `${baseUrl}slideshow/activity1.png` }, 
@@ -128,7 +134,7 @@ export default {
         if (this.isPlaying && this.photoList.length > 1) {
           this.nextPhoto();
         }
-      }, 6000);
+      }, 6000); // 每一張照片停留 6 秒，適合長者觀賞速度
     },
     stopTimer() {
       if (this.timer) clearInterval(this.timer);
@@ -150,22 +156,27 @@ export default {
 </script>
 
 <style scoped>
-/* 樣式保持不變，提供沉浸式的播放體驗 */
+/* 沉浸式播放樣式 */
 .slideshow-container { padding: 40px 20px; max-width: 1200px; margin: 0 auto; background-color: #fffaf5; min-height: 100vh; }
 .header-playback { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25px; }
 .main-title { font-size: 36px; color: #5d5146; font-weight: 800; margin: 0; }
 .activity-info { font-size: 20px; color: #9a8c7d; margin-top: 8px; display: block; }
 .activity-info i { color: #FF9933; margin-right: 8px; }
+
 .slideshow-area {
   height: 650px; border-radius: 40px; background-color: #1a1a1a; 
   display: flex; align-items: center; border: 12px solid #fff;
   box-shadow: 0 30px 60px rgba(93, 81, 70, 0.2) !important; overflow: hidden;
 }
+
 .photo-display { width: 100%; height: 100%; position: relative; }
 .current-photo-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
 .main-photo { width: 100%; height: 100%; }
+
+/* 照片淡入淡出動畫 */
 .photo-fade-enter-active, .photo-fade-leave-active { transition: opacity 1.2s ease; }
 .photo-fade-enter, .photo-fade-leave-to { opacity: 0; }
+
 .nav-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   background-color: rgba(255, 255, 255, 0.2); color: white; width: 80px; height: 80px;
@@ -175,6 +186,7 @@ export default {
 .nav-arrow:hover { background-color: #FF9933; transform: translateY(-50%) scale(1.1); }
 .left-arrow { left: 30px; }
 .right-arrow { right: 30px; }
+
 .controls-bar { margin-top: 40px; display: flex; justify-content: center; }
 .control-panel { 
   background: white; padding: 15px 40px; border-radius: 60px;
@@ -185,6 +197,7 @@ export default {
 .current { font-size: 32px; color: #FF9933; }
 .separator { margin: 0 15px; color: #dcdfe6; font-size: 24px; }
 .total { font-size: 24px; color: #909399; }
+
 .back-button { 
   background-color: #fff; border: 1px solid #dcdfe6; color: #606266;
   font-weight: bold; padding: 12px 30px; border-radius: 20px; font-size: 18px;

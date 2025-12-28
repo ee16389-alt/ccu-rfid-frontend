@@ -28,27 +28,45 @@
           <div 
             v-for="(det, idx) in photo.detections" 
             :key="idx" 
-            class="face-box" 
+            class="face-box clickable" 
             :style="det.boxStyle"
+            @click="openCorrectionDialog(det)"
           >
             <div class="name-tag-container">
-              <span class="name-tag">
-                {{ det.resident_name }} ({{ (det.confidence * 100).toFixed(0) }}%)
+              <span class="name-tag" :class="{ 'is-edited': det.isEdited }">
+                {{ det.resident_name }} {{ det.isEdited ? '(已修正)' : '' }}
               </span>
             </div>
           </div>
         </div>
       </div>
-      
       <el-empty v-if="processedPhotos.length === 0" description="目前該活動尚未有辨識資料"></el-empty>
     </div>
 
     <div class="footer-action" v-if="processedPhotos.length > 0">
-      <p class="hint-text">＊以上為 AI 系統自動辨識之初步結果，請管理員核對後正式同步至長者個人檔案。</p>
+      <p class="hint-text">＊提示：若辨識有誤，可直接點擊照片上的橘框進行手動修正。</p>
       <el-button type="success" size="large" @click="handleConfirm" icon="el-icon-circle-check" :loading="submitting">
         確認辨識結果並正式存檔
       </el-button>
     </div>
+
+    <el-dialog title="手動身分校正" :visible.sync="dialogVisible" width="30%" append-to-body>
+      <div style="margin-bottom: 20px; text-align: center;">
+        <p>當前選定辨識對象：<strong>{{ currentDet.resident_name }}</strong></p>
+      </div>
+      <el-select v-model="selectedResidentId" placeholder="請選擇正確的長者姓名" filterable style="width: 100%;">
+        <el-option
+          v-for="item in allResidents"
+          :key="item.id"
+          :label="item.name"
+          :value="item.id">
+        </el-option>
+      </el-select>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTempCorrection">暫存修改</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -62,7 +80,12 @@ export default {
       submitting: false,
       isDemoMode: false,
       rawResults: [],
-      processedPhotos: []
+      processedPhotos: [],
+      // 彈窗相關
+      dialogVisible: false,
+      allResidents: [],
+      currentDet: {},
+      selectedResidentId: ''
     };
   },
   methods: {
@@ -70,13 +93,10 @@ export default {
       this.loading = true;
       this.isDemoMode = false;
       const token = localStorage.getItem('userToken');
-      
       try {
-        // 對接後端 AI 辨識 API
         const response = await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize`, {}, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        
         if (response.data && response.data.length > 0) {
           this.rawResults = response.data;
         } else {
@@ -93,19 +113,16 @@ export default {
     loadMockData() {
       this.isDemoMode = true;
       const baseUrl = process.env.BASE_URL;
-      // 模擬後端回傳格式
-      this.rawResults = [
-        {
-          "resident_id": "26",
-          "resident_name": "孫秋香",
-          "confidence": 0.71,
-          "photos": [{
-            "photo_id": 54,
-            "photo_url": `${baseUrl}slideshow/activity2.png`, 
-            "bounding_box": [511, 116, 666, 270] 
-          }]
-        }
-      ];
+      this.rawResults = [{
+        "resident_id": "26",
+        "resident_name": "孫秋香",
+        "confidence": 0.71,
+        "photos": [{
+          "photo_id": 54,
+          "photo_url": `${baseUrl}slideshow/activity2.png`, 
+          "bounding_box": [511, 116, 666, 270] 
+        }]
+      }];
     },
 
     processData() {
@@ -116,11 +133,12 @@ export default {
             map[pic.photo_id] = { photo_id: pic.photo_id, photo_url: pic.photo_url, detections: [] };
           }
           map[pic.photo_id].detections.push({
-            resident_id: person.resident_id, // 為了後續儲存需要 ID
+            resident_id: person.resident_id,
             resident_name: person.resident_name,
             confidence: person.confidence,
-            rawBox: pic.bounding_box, // [top, left, bottom, right]
-            boxStyle: {}
+            rawBox: pic.bounding_box,
+            boxStyle: {},
+            isEdited: false // 初始狀態未編輯
           });
         });
       });
@@ -132,15 +150,12 @@ export default {
         const imgRef = this.$refs['img-' + id];
         const img = Array.isArray(imgRef) ? imgRef[0] : imgRef;
         const photo = this.processedPhotos.find(p => p.photo_id === id);
-        
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 計算圖片縮放比例，確保座標精準
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
 
         photo.detections.forEach(d => {
-          // 對接後端 [top, left, bottom, right] 格式
           const [t, l, b, r] = d.rawBox;
           d.boxStyle = {
             top: (t * sy) + 'px',
@@ -153,16 +168,48 @@ export default {
       });
     },
 
+    // --- 彈窗校正邏輯 ---
+    async openCorrectionDialog(det) {
+      this.currentDet = det;
+      this.selectedResidentId = det.resident_id;
+      this.dialogVisible = true;
+      if (this.allResidents.length === 0) {
+        await this.fetchAllResidents();
+      }
+    },
+
+    async fetchAllResidents() {
+      try {
+        const token = localStorage.getItem('userToken');
+        const res = await this.$http.get('/manager-api/Resident', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        this.allResidents = res.data;
+      } catch (err) {
+        this.$message.error('無法獲取長者清單');
+      }
+    },
+
+    saveTempCorrection() {
+      const selected = this.allResidents.find(r => r.id === this.selectedResidentId);
+      if (selected) {
+        this.currentDet.resident_id = selected.id;
+        this.currentDet.resident_name = selected.name;
+        this.currentDet.isEdited = true;
+        this.$message({ message: '修改已暫存', type: 'info', duration: 1500 });
+      }
+      this.dialogVisible = false;
+    },
+
+    // --- 最終整批儲存 ---
     async handleConfirm() {
       try {
-        await this.$confirm('確認辨識結果正確並同步存檔嗎？', '人工審核', {
+        await this.$confirm('確認目前所有辨識結果正確並正式同步至資料庫嗎？', '人工審核確認', {
           confirmButtonText: '確定存檔',
           type: 'success'
         });
 
         this.submitting = true;
-
-        // 封裝成同學要求的回傳格式
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
@@ -174,7 +221,6 @@ export default {
         });
 
         const token = localStorage.getItem('userToken');
-        // 呼叫新的 confirm API
         await this.$http.post(`/manager-api/Activity/${this.activityId}/recognize/confirm`, payload, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -186,6 +232,10 @@ export default {
       } finally {
         this.submitting = false;
       }
+    },
+
+    refreshBoxes() {
+      this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
     }
   },
   mounted() {
@@ -194,25 +244,51 @@ export default {
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.refreshBoxes);
-  },
-  methods: {
-    // ... 其他 methods 保持不變 ...
-    refreshBoxes() {
-      this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
-    }
   }
 };
 </script>
 
 <style scoped>
-/* 樣式保持專業感 */
 .ai-view { padding: 20px; background-color: #fcfaf8; min-height: 100vh; }
 .header { display: flex; align-items: center; margin-bottom: 25px; }
 .results-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(450px, 1fr)); gap: 30px; }
 .photo-card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); position: relative; }
 .img-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; line-height: 0; }
 .main-img { width: 100%; height: auto; display: block; }
-.face-box { position: absolute; border: 2px solid #FF9933; pointer-events: none; background: rgba(255, 153, 51, 0.15); box-sizing: border-box; z-index: 5; transition: all 0.2s; }
-.name-tag { background: #FF9933; color: white; padding: 2px 8px; font-size: 12px; font-weight: bold; border-radius: 4px 4px 0 0; position: absolute; top: -22px; left: -2px; white-space: nowrap; }
+
+/* 橘框點擊樣式 */
+.face-box { 
+  position: absolute; 
+  border: 2px solid #FF9933; 
+  background: rgba(255, 153, 51, 0.15); 
+  box-sizing: border-box; 
+  z-index: 5; 
+  transition: all 0.2s; 
+}
+.face-box.clickable {
+  cursor: pointer;
+}
+.face-box.clickable:hover {
+  background: rgba(255, 153, 51, 0.3);
+  border-width: 3px;
+}
+
+.name-tag { 
+  background: #FF9933; 
+  color: white; 
+  padding: 2px 8px; 
+  font-size: 11px; 
+  font-weight: bold; 
+  border-radius: 4px 4px 0 0; 
+  position: absolute; 
+  top: -21px; 
+  left: -2px; 
+  white-space: nowrap; 
+}
+.name-tag.is-edited {
+  background: #67C23A; /* 修正後變綠色 */
+}
+
 .footer-action { margin-top: 50px; text-align: center; padding: 40px 0; border-top: 2px dashed #e9e0d6; }
+.hint-text { color: #909399; font-size: 13px; margin-bottom: 15px; }
 </style>

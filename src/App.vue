@@ -84,7 +84,6 @@
 </template>
 
 <script>
-// 組件引入保持不變 ...
 import RFIDLanding from './components/RFIDLanding.vue';
 import ActivityMenu from './components/ActivityMenu.vue';
 import Slideshow from './components/Slideshow.vue';
@@ -107,8 +106,8 @@ export default {
     return {
       currentView: 'RFIDLanding',
       debugMode: true,
-      selectedRfid: null, // 改為追蹤選中的 RFID 序號
-      selectedResidentId: null, // 用於行政端的編輯 ID
+      selectedRfid: null, 
+      selectedResidentId: null,
       selectedActivityId: null,
       activeActivityObject: null 
     };
@@ -120,44 +119,73 @@ export default {
     }
   },
   methods: {
-    // 當 RFID 感應成功時
-    onScanSuccess(rfid) {
-      this.selectedRfid = rfid;
-      this.currentView = 'ActivityMenu';
+    // 核心調整：智慧跳轉邏輯
+    onScanSuccess(payload) {
+      // payload 格式: { rfid: '...', match: {...}, activities: [...] }
+      this.selectedRfid = payload.rfid;
+      
+      // 判斷 RFID 類型
+      if (payload.match && payload.match.type === 'activity') {
+        // 活動卡：直接鎖定該活動 ID 並播放
+        this.selectedActivityId = payload.match.id;
+        this.currentView = 'Slideshow';
+      } else {
+        // 長輩卡：跳轉至活動選擇牆
+        this.currentView = 'ActivityMenu';
+      }
     },
-    // 當選擇特定活動回憶時
+
+    // 照片牆點擊跳轉
     onSelectActivity(payload) {
+      // payload 格式: { activityId: '...', rfid: '...' }
       this.selectedActivityId = payload.activityId;
-      this.selectedRfid = payload.rfid; // 再次確認 RFID 傳遞
+      this.selectedRfid = payload.rfid; 
       this.currentView = 'Slideshow';
     },
-    // 行政端：管理活動
+
+    // 行政管理邏輯 (保持對接 Swagger 路徑)
     onManageActivity(id) {
       this.selectedActivityId = id;
       this.activeActivityObject = { id: id }; 
       this.currentView = 'ActivityManage';
     },
-    // 行政端：建立活動
+
     onAddActivity() {
       this.selectedActivityId = null;
       this.activeActivityObject = null; 
       this.currentView = 'ActivityManage';
     },
-    // 行政端：編輯長者
+
     onEditElder(id) {
       this.selectedResidentId = id;
       this.currentView = 'ElderEdit';
     },
-    // 行政端：新增長者
+
     onAddElder() {
       this.selectedResidentId = null;
       this.currentView = 'ElderEdit';
     },
+
     logout() {
-      localStorage.removeItem('userToken');
+      localStorage.removeItem('userToken'); // 配合 main.js 攔截器
       this.currentView = 'Login';
       this.$message.info('已安全登出');
     }
   }
 };
 </script>
+
+<style>
+/* 全域基本樣式 */
+body { margin: 0; font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Arial",sans-serif; }
+.debug-toolbar { 
+  position: fixed; top: 0; width: 100%; z-index: 9999; background: #333; 
+  padding: 5px 20px; display: flex; align-items: center; gap: 10px;
+}
+.admin-nav {
+  position: fixed; bottom: 0; width: 100%; background: white;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05); display: flex;
+  justify-content: center; padding: 10px; z-index: 1000;
+}
+.container { min-height: 100vh; padding-bottom: 60px; }
+</style>
