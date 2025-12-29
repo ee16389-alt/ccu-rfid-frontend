@@ -48,7 +48,7 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="RFID 辨識編號">
-                  <el-input v-model="elderForm.rfid_uid" placeholder="請填寫或感應卡片">
+                  <el-input v-model="elderForm.rfid_uid" placeholder="請填寫序號進行測試">
                     <i slot="prefix" class="el-icon-postcard"></i>
                   </el-input>
                 </el-form-item>
@@ -58,7 +58,7 @@
               <el-input type="textarea" v-model="elderForm.remark" rows="5"></el-input>
             </el-form-item>
           </el-col>
-        </el-row>
+        </row>
 
         <div class="form-actions">
           <el-button type="success" @click="submitForm" :loading="submitting" icon="el-icon-folder-checked">
@@ -93,11 +93,10 @@ export default {
   methods: {
     async fetchElderData() {
       try {
-        // 使用相對路徑，配合 main.js 的 baseURL
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name || '',
-          age: res.data.age || 80,
+          age: parseInt(res.data.age) || 80, // 強制整數轉型
           rfid_uid: res.data.rfid_uid || '',
           remark: res.data.remark || ''
         };
@@ -117,15 +116,14 @@ export default {
       }
 
       this.submitting = true;
-      
-      // 核心修正：封裝 FormData 並確保 Key 名稱首字母大寫以對接 Swagger
       const formData = new FormData();
+      
+      // 依據 Swagger 規格封裝與強轉型
       formData.append('Name', String(this.elderForm.name));
-      formData.append('Age', Number(this.elderForm.age)); // 確保為數字型別
-      formData.append('RfidUid', this.elderForm.rfid_uid ? String(this.elderForm.rfid_uid) : ''); 
+      formData.append('Age', parseInt(this.elderForm.age)); // 關鍵：轉為整數
+      formData.append('RfidUid', this.elderForm.rfid_uid ? String(this.elderForm.rfid_uid) : 'DEMO_001'); // 避免空值
       formData.append('Remark', this.elderForm.remark ? String(this.elderForm.remark) : '');
       
-      // 檔案上傳處理：只有在有選擇新照片時才 append
       if (this.selectedFile) {
         formData.append('Avatar', this.selectedFile); 
       }
@@ -134,7 +132,7 @@ export default {
         const url = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
         const method = this.isEdit ? 'put' : 'post';
         
-        // 發送請求：headers 保持為空，讓 axios 自動補齊帶有 boundary 的 Content-Type
+        // 核心對接邏輯：headers 留空讓 axios 自動處理
         await this.$http({
           method: method,
           url: url,
@@ -145,8 +143,8 @@ export default {
         this.$message.success(this.isEdit ? '資料更新成功' : '新增登記成功');
         this.$emit('go-back');
       } catch (err) {
-        console.error('API Error:', err.response);
-        const msg = err.response?.data?.message || '資料格式錯誤 (415) 或連線逾時';
+        console.error('Submit Error:', err.response);
+        const msg = err.response?.data?.message || '資料格式錯誤或後端 API 暫時無法處理 PUT 檔案上傳';
         this.$message.error(`儲存失敗：${msg}`);
       } finally {
         this.submitting = false;
