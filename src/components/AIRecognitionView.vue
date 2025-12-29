@@ -90,6 +90,7 @@ export default {
       this.isDemoMode = false;
       const token = localStorage.getItem('userToken');
       try {
+        // 修正點：移除多餘的 /manager-api 前綴，避免 404
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
           headers: { 'Authorization': `Bearer ${token}` },
           timeout: 30000 
@@ -101,7 +102,7 @@ export default {
           this.loadMockData(); 
         }
       } catch (err) {
-        console.warn('API 抓取失敗，啟動多樣化示範模式', err);
+        console.warn('API 抓取失敗，啟動示範模式', err);
         this.loadMockData(); 
       } finally {
         this.processData();
@@ -111,7 +112,7 @@ export default {
 
     loadMockData() {
       this.isDemoMode = true;
-      // 使用您確認有效的 GitHub Pages 絕對路徑
+      // 使用穩定的 GitHub Pages 絕對網址
       const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
       
       this.rawResults = [
@@ -179,7 +180,6 @@ export default {
     },
 
     refreshBoxes() {
-      // 延遲計算以避開視窗縮放時的卡頓
       setTimeout(() => {
         this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
       }, 200);
@@ -197,6 +197,7 @@ export default {
     async fetchAllResidents() {
       try {
         const token = localStorage.getItem('userToken');
+        // 修正點：配合 baseURL，路徑改為單層
         const res = await this.$http.get('/Resident', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -228,6 +229,7 @@ export default {
           });
         });
         const token = localStorage.getItem('userToken');
+        // 修正點：路徑統一使用單層
         await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
