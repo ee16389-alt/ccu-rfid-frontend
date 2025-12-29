@@ -27,7 +27,6 @@
         @click="handleStart" 
         class="glass-start-button"
         :loading="loading"
-        :disabled="!hasToken"
       >
         {{ loading ? '請刷卡...' : '開始感應' }}
       </el-button>
@@ -37,11 +36,6 @@
       <div class="footer-info">
         <span class="dot"></span> 智慧 RFID 系統正在運作中 <span class="dot"></span>
       </div>
-      <transition name="el-fade-in">
-        <div v-if="!hasToken" class="auth-warning">
-          <i class="el-icon-warning-outline"></i> 系統尚未授權，請聯絡管理員登入
-        </div>
-      </transition>
     </div>
 
     <input
@@ -61,7 +55,6 @@ export default {
   data() {
     return {
       loading: false,
-      hasToken: !!localStorage.getItem('userToken'),
       scanBuffer: '',
       scanTimer: null,
       countdown: 3,
@@ -71,12 +64,6 @@ export default {
   methods: {
     // 啟動感應流程
     async handleStart() {
-      const token = localStorage.getItem('userToken');
-      if (!token) {
-        this.$message.error('【權限錯誤】請先由行政管理端完成登入驗證');
-        return;
-      }
-
       this.loading = true;
       this.scanBuffer = '';
       this.countdown = 3;
