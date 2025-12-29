@@ -136,7 +136,7 @@ export default {
     processData() {
       const map = {};
       this.rawResults.forEach(person => {
-        // 修正點 1：對應後端 JSON 欄位名稱
+        // 修正點 1：對接後端 JSON 欄位
         const resId = person.id;   
         const resName = person.name; 
 
@@ -155,7 +155,7 @@ export default {
         });
       });
       
-      // 修正點 2：只顯示最新上傳的一張照片
+      // 修正點 2：只顯示最新一張照片
       const sortedPhotos = Object.values(map).sort((a, b) => b.photo_id - a.photo_id);
       this.processedPhotos = sortedPhotos.length > 0 ? [sortedPhotos[0]] : [];
     },
@@ -168,6 +168,7 @@ export default {
         
         if (!img || !photo || img.naturalWidth === 0) return;
 
+        // 座標轉換邏輯（適配裁切位移）
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
         const computedStyle = window.getComputedStyle(img);
@@ -244,7 +245,6 @@ export default {
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
-            // 提交時同樣使用 resident_id 以符合 API 期待
             payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
           });
         });
