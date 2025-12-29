@@ -52,13 +52,12 @@
 </template>
 
 <script>
-import axios from 'axios';
+// 修正點 1：移除手動導入的 axios，統一使用掛載於全域的 this.$http
 
 export default {
   name: 'Login',
   data() {
     return {
-      // 預填預設帳密以便 Demo
       loginForm: { account: 'ccu', password: '123' },
       loading: false
     };
@@ -72,13 +71,10 @@ export default {
 
       this.loading = true;
       try {
-        // 使用完整路徑對接 Azure 上的管理員登入 API
-        const res = await axios.post(
-          'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api/Admin/login', 
-          this.loginForm
-        );
+        // 修正點 2：改用相對路徑 /Admin/login。
+        // 這會配合 main.js 的 baseURL 拼接成正確的 https://.../manager-api/Admin/login。
+        const res = await this.$http.post('/Admin/login', this.loginForm);
 
-        // 登入成功處理
         if (res.data && res.data.access_token) {
           // 儲存 Token 供後續所有組件使用
           localStorage.setItem('userToken', res.data.access_token);
@@ -89,17 +85,16 @@ export default {
             duration: 2000
           });
           
-          // 通知父組件切換視圖
           this.$emit('login-success');
         }
       } catch (err) {
         console.error('Login Error:', err);
-        // 針對不同錯誤碼提供提示
         const status = err.response ? err.response.status : null;
         if (status === 401) {
           this.$message.error('帳號或密碼錯誤，請重新輸入');
         } else {
-          this.$message.error('系統連線失敗，請檢查網路狀態');
+          // 修正點 3：此時會套用 main.js 的 30 秒超時邏輯，解決 Azure 冷啟動問題。
+          this.$message.error('系統連線失敗，請檢查網路狀態或伺服器負載');
         }
       } finally {
         this.loading = false;
@@ -110,6 +105,7 @@ export default {
 </script>
 
 <style scoped>
+/* 樣式部分保持不變 */
 .login-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f7f3ed; }
 .login-box { display: flex; width: 900px; min-height: 580px; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
 .login-image-side { flex: 1.2; position: relative; background-color: #f0e6da; }

@@ -84,26 +84,21 @@ export default {
 
     async fetchElders() {
       this.loading = true;
-      const token = localStorage.getItem('userToken');
       
-      if (!token) {
-        this.setMockData();
-        this.loading = false;
-        return;
-      }
+      // 修正點 1：不再需要手動檢查 Token 或寫入 Header。
+      // main.js 的攔截器會自動為我們處理 Token 注入與 401 登入檢查。
 
       try {
-        const res = await this.$http.get('/manager-api/Resident', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // 修正點 2：移除多餘的 /manager-api，改用相對路徑。
+        // 配合 main.js 的 baseURL，這會精準發送到 https://.../manager-api/Resident
+        const res = await this.$http.get('/Resident');
 
         if (res.data && res.data.length > 0) {
-          // 修改點：映射後端回傳的 rfid_uid 欄位
           this.elderList = res.data.map(item => ({
             id: item.id,
             name: item.name,
             age: item.age,
-            rfid_uid: item.rfid_uid, // 同步後端屬性名稱
+            rfid_uid: item.rfid_uid, 
             avatar: item.avatar_url 
           }));
         } else {
@@ -118,20 +113,19 @@ export default {
     },
     
     setMockData() {
-      // 示範資料對齊後端 RFID
       this.elderList = [
         { 
           id: 'm1', 
           name: 'James Wilson', 
           age: 82, 
-          rfid_uid: '116A2434', // 對比同學截圖中的 RFID
+          rfid_uid: '116A2434', 
           avatar: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=150&q=80' 
         },
         { 
           id: 'm2', 
           name: '唐伯虎', 
           age: 75, 
-          rfid_uid: '8A303053', // 對應新增活動的 RFID 範例
+          rfid_uid: '8A303053', 
           avatar: 'https://images.unsplash.com/photo-1544144433-d50aff500b91?auto=format&fit=crop&w=150&q=80' 
         }
       ];

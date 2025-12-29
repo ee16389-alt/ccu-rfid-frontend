@@ -113,10 +113,18 @@ export default {
     };
   },
   computed: {
-    isAdminView() {
-      const adminPages = ['ActivityList', 'ElderList', 'ActivityManage', 'ElderEdit', 'AIScreening', 'AIRecognition'];
-      return adminPages.includes(this.currentView);
-    }
+    // --- 修正後的 isAdminView ---
+isAdminView() {
+  const adminPages = [
+    'ActivityList', 
+    'ElderList', 
+    'ActivityManage', 
+    'ElderEdit', 
+    'AIScreening', 
+    'AIRecognition' // 確保這裡對應到 currentView 設定的字串
+  ];
+  return adminPages.includes(this.currentView);
+}
   },
   methods: {
     // 核心調整：智慧跳轉邏輯

@@ -110,7 +110,7 @@
           
           <el-upload
             v-if="!isNewActivity"
-            :action="getUploadUrl()"
+            :action="getUploadUrl"
             name="Files"
             :headers="uploadHeaders"
             multiple
@@ -135,7 +135,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+// 修正點 1：不需要手動導入 axios，改用掛載於 Vue 原型的 this.$http
 
 export default {
   name: 'ActivityManage',
@@ -149,13 +149,10 @@ export default {
         title: this.selectedActivity?.title || '',
         activity_at: this.selectedActivity?.activity_at || '',
         location: this.selectedActivity?.location || '',
-        rfid: this.selectedActivity?.rfid || '', // 新增：對接後端 RFID 欄位
+        rfid: this.selectedActivity?.rfid || '', 
         photoCount: this.selectedActivity?.photo_count || 0
       },
       analyzedCount: this.selectedActivity?.photo_count || 0,
-      uploadHeaders: {
-        'Authorization': `Bearer ${localStorage.getItem('userToken')}`
-      },
       customColors: [
         { color: '#f56c6c', percentage: 20 },
         { color: '#67c23a', percentage: 100 }
@@ -166,13 +163,20 @@ export default {
     progressPercentage() {
       if (this.activityForm.photoCount === 0) return 0;
       return Math.floor((this.analyzedCount / this.activityForm.photoCount) * 100);
+    },
+    // 修正點 2：改為 computed 屬性，並從 this.$http 獲取 baseURL
+    getUploadUrl() {
+      const baseUrl = this.$http.defaults.baseURL;
+      return `${baseUrl}/Activity/${this.activityForm.id}/UploadBatch`;
+    },
+    // 修正點 3：統一從攔截器獲取認證資訊，此處僅作為上傳組件所需
+    uploadHeaders() {
+      return {
+        'Authorization': `Bearer ${localStorage.getItem('userToken')}`
+      };
     }
   },
   methods: {
-    getUploadUrl() {
-      return `https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api/Activity/${this.activityForm.id}/UploadBatch`;
-    },
-    
     async handleCreateActivity() {
       if (!this.activityForm.title) {
         this.$message.warning('請輸入活動名稱');
@@ -180,17 +184,15 @@ export default {
       }
       this.submitting = true;
       try {
-        // 發送包含 rfid 的完整表單資料
-        const res = await axios.post('https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api/Activity', this.activityForm, {
-          headers: this.uploadHeaders
-        });
+        // 修正點 4：使用相對路徑 '/Activity'，避免路徑重複
+        const res = await this.$http.post('/Activity', this.activityForm);
         
-        // 儲存後端回傳的 ID 並切換為上傳模式
         this.activityForm.id = res.data.id;
         this.isNewActivity = false;
         this.$message.success('活動檔案已建立，且已綁定 RFID');
       } catch (err) {
-        this.$message.error('系統連線失敗');
+        // 配合 main.js 處理逾時，此處可做特定提示
+        this.$message.error('系統連線失敗或回應超時');
       } finally {
         this.submitting = false;
       }
@@ -201,16 +203,15 @@ export default {
       setTimeout(() => { this.analyzedCount++; }, 1500);
     },
     handleUploadError() {
-      this.$message.error('上傳失敗');
+      this.$message.error('上傳失敗，請檢查網路或檔案大小');
     }
   }
 };
 </script>
 
 <style scoped>
-/* 保持原有樣式，新增提示文字樣式 */
+/* 樣式部分保持不變 */
 .form-tip { font-size: 12px; color: #909399; margin-top: 4px; line-height: 1.4; }
-/* ... 原有其他樣式保持不變 ... */
 .activity-manage-container { padding: 15px; background-color: #fcfaf8; min-height: 80vh; }
 .header-section { display: flex; align-items: center; margin-bottom: 25px; }
 .header-section h2 { margin: 0; color: #5d5146; font-size: 22px; }

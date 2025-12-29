@@ -117,42 +117,42 @@ export default {
       await this.processRfid(cardUid);
     },
 
-    // 處理 RFID 查詢邏輯
-    async processRfid(cardUid) {
-      try {
-        // 使用統整後的正式 API 路徑
-        const response = await this.$http.get(`/manager-api/rfid/${cardUid}`);
+    // --- 優化後的 processRfid 方法 ---
+async processRfid(cardUid) {
+  try {
+    // 修正點：移除重複的 /manager-api 前綴
+    // 系統會自動拼接為 https://.../manager-api/rfid/${cardUid}
+    const response = await this.$http.get(`/rfid/${cardUid}`);
 
-        if (response.data.match && response.data.match.length > 0) {
-          const target = response.data.match[0];
+    if (response.data.match && response.data.match.length > 0) {
+      const target = response.data.match[0];
 
-          this.$notify({
-            title: '感應成功',
-            // 整合身分判斷訊息
-            message: target.type === 'subject' 
-              ? `${target.name} 您好，歡迎回到時光機！` 
-              : `請觀賞 ${target.name} 活動相簿`,
-            type: 'success',
-            position: 'top-left'
-          });
+      this.$notify({
+        title: '感應成功',
+        message: target.type === 'subject' 
+          ? `${target.name} 您好，歡迎回到時光機！` 
+          : `請觀賞 ${target.name} 活動相簿`,
+        type: 'success',
+        position: 'top-left'
+      });
 
-          // 延遲跳轉並傳遞完整活動清單
-          setTimeout(() => {
-            this.$emit('scan-success', {
-              rfid: cardUid,
-              match: target,
-              activities: response.data.activitys || []
-            });
-          }, 1000);
-        } else {
-          this.$message.warning('查無此卡片資料，請聯絡管理員登記');
-          this.loading = false;
-        }
-      } catch (error) {
-        console.warn('API 錯誤或未連線，轉入 Demo', error);
-        this.enterDemoMode();
-      }
-    },
+      // 跳轉並傳遞資料
+      setTimeout(() => {
+        this.$emit('scan-success', {
+          rfid: cardUid,
+          match: target,
+          activities: response.data.activitys || []
+        });
+      }, 1000);
+    } else {
+      this.$message.warning('查無此卡片資料，請聯絡管理員登記');
+      this.loading = false;
+    }
+  } catch (error) {
+    console.warn('API 錯誤或未連線，轉入 Demo', error);
+    this.enterDemoMode();
+  }
+},
 
     // 示範模式處理
     enterDemoMode() {

@@ -12,39 +12,37 @@ Vue.config.productionTip = false
 Vue.use(ElementUI);
 Vue.use(VueRouter);
 
-// --- 設定路由表 ---
-// 這裡保留彈性，讓您未來可以透過網址直接進入特定的辨識結果頁
+// --- 1. 設定路由表 ---
+// 使用 hash 模式以確保在 GitHub Pages 上重新整理不會出現 404
 const routes = [
   {
     path: '/activity/:activityId/ai',
     name: 'AIRecognition',
     component: AIRecognitionView,
-    props: true // 允許將路徑中的 activityId 直接作為 props 傳入組件
+    props: true 
   }
 ];
 
 const router = new VueRouter({
-  mode: 'hash', // GitHub Pages 必須使用 hash 模式以避免 404 錯誤
+  mode: 'hash', 
   base: process.env.BASE_URL, 
   routes
 });
 
-// --- Axios 實例配置 ---
+// --- 2. Axios 實例配置 ---
 const instance = axios.create({
-  // 修正點 1：將 /manager-api 直接加入 baseURL，統一口徑
+  // 將 /manager-api 直接加入 baseURL，避免組件內路徑重複
   baseURL: 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api',
-  // 修正點 2：延長逾時時間至 30 秒，避免 Azure 冷啟動導致連線中斷
+  // 延長逾時時間至 30 秒，應對 Azure 冷啟動延遲
   timeout: 30000, 
   withCredentials: false 
 });
 
-// --- 攔截器：確保每一筆請求都帶上管理員 Token ---
+// --- 3. 請求攔截器：自動帶入 Authorization Token ---
 instance.interceptors.request.use(
   config => {
-    // 從本地儲存取得 Token
     const token = localStorage.getItem('userToken');
     if (token) {
-      // 為所有請求注入 Authorization Header
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -52,7 +50,30 @@ instance.interceptors.request.use(
   error => Promise.reject(error)
 );
 
-// 全域掛載 API 請求工具，讓組件內可以使用 this.$http
+// --- 4. 回應攔截器：處理連線逾時與身份失效 ---
+instance.interceptors.response.use(
+  response => response,
+  error => {
+    // 處理請求逾時提示
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      ElementUI.Message.error('伺服器回應過慢，請稍後再試（Azure 啟動中）');
+    }
+    // 處理 401 Token 過期
+    else if (error.response && error.response.status === 401) {
+      ElementUI.Message.warning('登入已逾時，請重新登入');
+      localStorage.removeItem('userToken');
+      // 如果有 App.vue 的事件控制，可在此觸發跳轉
+    }
+    // 處理 404 路徑錯誤提示
+    else if (error.response && error.response.status === 404) {
+      console.error('API 路徑錯誤，請檢查是否重複拼接了 manager-api');
+    }
+    return Promise.reject(error);
+  }
+);
+
+// --- 5. 全域掛載 ---
+// 讓組件內可以使用 this.$http 調用 API
 Vue.prototype.$http = instance;
 
 new Vue({

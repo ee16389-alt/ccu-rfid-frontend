@@ -72,8 +72,7 @@
 </template>
 
 <script>
-import axios from 'axios';
-
+// 修正點 1：移除手動導入的 axios，改用 this.$http
 export default {
   name: 'ElderEdit',
   props: ['elderId'],
@@ -94,15 +93,13 @@ export default {
   },
   methods: {
     async fetchElderData() {
-      const token = localStorage.getItem('userToken');
       try {
-        const res = await this.$http.get(`/manager-api/Resident/${this.elderId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // 修正點 2：移除多餘的 /manager-api，改用單層路徑
+        const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name,
           age: res.data.age,
-          rfid_uid: res.data.rfid_uid, // 對接 API 欄位
+          rfid_uid: res.data.rfid_uid,
           remark: res.data.remark
         };
         this.imageUrl = res.data.avatar_url || '';
@@ -121,31 +118,30 @@ export default {
       }
 
       this.submitting = true;
-      const token = localStorage.getItem('userToken');
       
-      // 使用 FormData 處理檔案上傳
       const formData = new FormData();
       formData.append('Name', this.elderForm.name);
       formData.append('Age', this.elderForm.age);
-      formData.append('RfidUid', this.elderForm.rfid_uid); // RFID 序號
+      formData.append('RfidUid', this.elderForm.rfid_uid);
       formData.append('Remark', this.elderForm.remark);
       if (this.selectedFile) {
-        formData.append('Avatar', this.selectedFile); // 大頭照檔案
+        formData.append('Avatar', this.selectedFile);
       }
 
       try {
+        // 修正點 3：改用相對路徑，並移除重複的 manager-api
         const url = this.isEdit 
-          ? `https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api/Resident/${this.elderId}`
-          : `https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net/manager-api/Resident`;
+          ? `/Resident/${this.elderId}`
+          : `/Resident`;
         
         const method = this.isEdit ? 'put' : 'post';
         
-        await axios({
+        // 使用掛載的 this.$http 以享受 30s 逾時與自動認證
+        await this.$http({
           method: method,
           url: url,
           data: formData,
           headers: { 
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         });
@@ -153,7 +149,9 @@ export default {
         this.$message.success(this.isEdit ? '資料更新成功' : '入園登記成功');
         this.$emit('go-back');
       } catch (err) {
-        this.$message.error('系統儲存失敗');
+        // 優化錯誤提示
+        const errorMsg = err.response?.data?.message || '系統儲存失敗，請檢查網路連線';
+        this.$message.error(errorMsg);
       } finally {
         this.submitting = false;
       }
@@ -163,7 +161,6 @@ export default {
 </script>
 
 <style scoped>
-/* 樣式保持不變 */
 .elder-edit-container { padding: 15px; background-color: #fcfaf8; min-height: 80vh; }
 .header-section { display: flex; align-items: center; margin-bottom: 25px; }
 .avatar-col { display: flex; justify-content: center; }

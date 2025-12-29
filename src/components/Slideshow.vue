@@ -67,7 +67,6 @@
 <script>
 export default {
   name: 'Slideshow',
-  // 接收活動 ID 與來自感應頁面的 RFID 序號
   props: ['activityId', 'rfid_uid'],
   data() {
     return {
@@ -87,19 +86,15 @@ export default {
     this.stopTimer();
   },
   methods: {
-    // 核心對接：優先測試同學提供的 /api/ 路徑
     async fetchPhotos() {
       this.loading = true;
-      const token = localStorage.getItem('userToken');
-      
       try {
-        // 解決 404 問題：測試 /api/ 路徑並帶入 RFID 參數
-        const res = await this.$http.get(`/api/activities/${this.activityId}/photos`, {
-          params: { rfid: this.rfid_uid }, // 精準篩選長輩照片
-          headers: { 'Authorization': `Bearer ${token}` }
+        // 修正點 1：移除 /api/ 前綴，改用相對路徑。
+        // 配合 main.js 的 baseURL，這會請求至 .../manager-api/activities/{id}/photos
+        const res = await this.$http.get(`/activities/${this.activityId}/photos`, {
+          params: { rfid: this.rfid_uid }
         });
 
-        // 欄位容錯映射
         if (res.data.photos && res.data.photos.length > 0) {
           this.photoList = res.data.photos.map(p => ({
             id: p.id || p.photo_id,
@@ -111,8 +106,7 @@ export default {
           this.loadMockPhotos(); 
         }
       } catch (err) {
-        // 若出現 404 (Not Found) 則記錄警告並進入示範模式
-        console.warn('API 抓取照片失敗 (測試 /api/ 路徑)，啟動示範模式');
+        console.warn('API 抓取失敗，啟動示範模式');
         this.loadMockPhotos(); 
       } finally {
         this.loading = false;
@@ -121,12 +115,13 @@ export default {
 
     loadMockPhotos() {
       this.activityName = '時光記憶精選 (示範模式)';
-      const baseUrl = process.env.BASE_URL || './';
+      // 修正點 2：使用穩定的絕對路徑確保 Demo 時圖片一定會出來
+      const baseUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/";
       this.photoList = [
-        { url: `${baseUrl}slideshow/activity1.png` }, 
-        { url: `${baseUrl}slideshow/activity2.png` }, 
-        { url: `${baseUrl}slideshow/activity3.png` }, 
-        { url: `${baseUrl}slideshow/activity4.png` }
+        { url: `${baseUrl}activity1.png` }, 
+        { url: `${baseUrl}activity2.png` }, 
+        { url: `${baseUrl}activity3.png` }, 
+        { url: `${baseUrl}activity4.png` }
       ];
     },
 
@@ -135,7 +130,7 @@ export default {
         if (this.isPlaying && this.photoList.length > 1) {
           this.nextPhoto();
         }
-      }, 6000); // 長者觀賞建議停留 6 秒
+      }, 6000); 
     },
     stopTimer() {
       if (this.timer) clearInterval(this.timer);
@@ -155,3 +150,22 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+/* 此處保留您原本的樣式即可 */
+.slideshow-container { padding: 30px; background-color: #333; min-height: 100vh; color: white; }
+.header-playback { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.main-title { font-size: 28px; margin: 0; color: #FF9933; }
+.slideshow-area { background-color: #000; border: none; position: relative; height: 70vh; display: flex; align-items: center; justify-content: center; }
+.photo-display { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.main-photo { max-width: 100%; max-height: 100%; }
+.nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 50px; color: rgba(255,255,255,0.5); cursor: pointer; z-index: 10; transition: 0.3s; }
+.nav-arrow:hover { color: #FF9933; scale: 1.2; }
+.left-arrow { left: 20px; }
+.right-arrow { right: 20px; }
+.controls-bar { margin-top: 30px; text-align: center; }
+.control-panel { display: inline-flex; align-items: center; background: rgba(255,255,255,0.1); padding: 10px 30px; border-radius: 40px; }
+.play-btn { font-size: 30px; margin-right: 20px; }
+.counter-badge { font-size: 24px; font-family: monospace; }
+.current { color: #FF9933; font-weight: bold; }
+</style>
