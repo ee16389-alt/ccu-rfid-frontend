@@ -96,10 +96,10 @@ export default {
         // 使用相對路徑，配合 main.js 的 baseURL
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
-          name: res.data.name,
-          age: res.data.age,
-          rfid_uid: res.data.rfid_uid,
-          remark: res.data.remark
+          name: res.data.name || '',
+          age: res.data.age || 80,
+          rfid_uid: res.data.rfid_uid || '',
+          remark: res.data.remark || ''
         };
         this.imageUrl = res.data.avatar_url || '';
       } catch (err) {
@@ -118,15 +118,14 @@ export default {
 
       this.submitting = true;
       
-      // 核心修正：封裝 FormData 並確保 Key 名稱符合後端 API 期待
+      // 核心修正：封裝 FormData 並確保 Key 名稱首字母大寫以對接 Swagger
       const formData = new FormData();
-      formData.append('Name', this.elderForm.name);
-      formData.append('Age', this.elderForm.age);
-      // 確保欄位不為空值以通過後端驗證
-      formData.append('RfidUid', this.elderForm.rfid_uid || ''); 
-      formData.append('Remark', this.elderForm.remark || '');
+      formData.append('Name', String(this.elderForm.name));
+      formData.append('Age', Number(this.elderForm.age)); // 確保為數字型別
+      formData.append('RfidUid', this.elderForm.rfid_uid ? String(this.elderForm.rfid_uid) : ''); 
+      formData.append('Remark', this.elderForm.remark ? String(this.elderForm.remark) : '');
       
-      // 只有在選擇了新照片時才加入 Avatar 欄位
+      // 檔案上傳處理：只有在有選擇新照片時才 append
       if (this.selectedFile) {
         formData.append('Avatar', this.selectedFile); 
       }
@@ -135,7 +134,7 @@ export default {
         const url = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
         const method = this.isEdit ? 'put' : 'post';
         
-        // 修正發送邏輯：Headers 留空，讓瀏覽器自動填寫 Content-Type 及 Boundary
+        // 發送請求：headers 保持為空，讓 axios 自動補齊帶有 boundary 的 Content-Type
         await this.$http({
           method: method,
           url: url,
@@ -143,11 +142,11 @@ export default {
           headers: {} 
         });
 
-        this.$message.success(this.isEdit ? '住民資料更新成功' : '入園登記成功');
+        this.$message.success(this.isEdit ? '資料更新成功' : '新增登記成功');
         this.$emit('go-back');
       } catch (err) {
-        // 優化錯誤提示，方便 Demo 時排查問題
-        const msg = err.response?.data?.message || '資料格式錯誤或連線逾時';
+        console.error('API Error:', err.response);
+        const msg = err.response?.data?.message || '資料格式錯誤 (415) 或連線逾時';
         this.$message.error(`儲存失敗：${msg}`);
       } finally {
         this.submitting = false;
