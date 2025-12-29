@@ -187,7 +187,7 @@ isAdminView() {
 /* 全域基本樣式 */
 body { margin: 0; font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Arial",sans-serif; }
 .debug-toolbar { 
-  position: fixed; top: 0; width: 100%; z-index: 9999; background: #333; 
+  position: fixed; top: 0; width: 100%; z-index: 2000; background: #333; 
   padding: 5px 20px; display: flex; align-items: center; gap: 10px;
 }
 .admin-nav {
