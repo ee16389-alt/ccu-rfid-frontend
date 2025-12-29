@@ -118,35 +118,35 @@ export default {
 
       this.submitting = true;
       
-      // 核心修正：封裝 FormData 並確保 Key 名稱首字母大寫
+      // 核心修正：封裝 FormData 並確保 Key 名稱符合後端 API 期待
       const formData = new FormData();
       formData.append('Name', this.elderForm.name);
       formData.append('Age', this.elderForm.age);
+      // 確保欄位不為空值以通過後端驗證
       formData.append('RfidUid', this.elderForm.rfid_uid || ''); 
       formData.append('Remark', this.elderForm.remark || '');
       
+      // 只有在選擇了新照片時才加入 Avatar 欄位
       if (this.selectedFile) {
-        formData.append('Avatar', this.selectedFile); // 對應後端 Avatar 欄位
+        formData.append('Avatar', this.selectedFile); 
       }
 
       try {
         const url = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
         const method = this.isEdit ? 'put' : 'post';
         
-        // 發送請求：不要手動設定 Content-Type
+        // 修正發送邏輯：Headers 留空，讓瀏覽器自動填寫 Content-Type 及 Boundary
         await this.$http({
           method: method,
           url: url,
           data: formData,
-          headers: {
-            // 此處留空，讓瀏覽器自動填寫 multipart/form-data 及其 boundary
-          }
+          headers: {} 
         });
 
         this.$message.success(this.isEdit ? '住民資料更新成功' : '入園登記成功');
         this.$emit('go-back');
       } catch (err) {
-        // 捕獲並顯示詳細錯誤，幫助解決 415 問題
+        // 優化錯誤提示，方便 Demo 時排查問題
         const msg = err.response?.data?.message || '資料格式錯誤或連線逾時';
         this.$message.error(`儲存失敗：${msg}`);
       } finally {
