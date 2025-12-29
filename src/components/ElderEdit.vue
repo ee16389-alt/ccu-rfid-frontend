@@ -48,7 +48,7 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="RFID 辨識編號">
-                  <el-input v-model="elderForm.rfid_uid" placeholder="請感應卡片系統自動帶入">
+                  <el-input v-model="elderForm.rfid_uid" placeholder="請填寫或感應卡片">
                     <i slot="prefix" class="el-icon-postcard"></i>
                   </el-input>
                 </el-form-item>
@@ -93,6 +93,7 @@ export default {
   methods: {
     async fetchElderData() {
       try {
+        // 使用相對路徑，配合 main.js 的 baseURL
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name,
@@ -117,40 +118,37 @@ export default {
 
       this.submitting = true;
       
+      // 核心修正：封裝 FormData 並確保 Key 名稱首字母大寫
       const formData = new FormData();
-      // 根據後端可能的大小寫規範調整
-      formData.append('name', this.elderForm.name);
-      formData.append('age', this.elderForm.age);
-      formData.append('rfid_uid', this.elderForm.rfid_uid || ''); 
-      formData.append('remark', this.elderForm.remark || '');
+      formData.append('Name', this.elderForm.name);
+      formData.append('Age', this.elderForm.age);
+      formData.append('RfidUid', this.elderForm.rfid_uid || ''); 
+      formData.append('Remark', this.elderForm.remark || '');
       
       if (this.selectedFile) {
-        // 請確認後端接收檔案的 Key 名稱，如果是 'Avatar' 則維持不變
-        formData.append('Avatar', this.selectedFile);
+        formData.append('Avatar', this.selectedFile); // 對應後端 Avatar 欄位
       }
 
       try {
-        const url = this.isEdit 
-          ? `/Resident/${this.elderId}`
-          : `/Resident`;
-        
+        const url = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
         const method = this.isEdit ? 'put' : 'post';
         
-        // 核心修正：移除 headers，讓瀏覽器自動生成正確的 multipart boundary
+        // 發送請求：不要手動設定 Content-Type
         await this.$http({
           method: method,
           url: url,
-          data: formData
+          data: formData,
+          headers: {
+            // 此處留空，讓瀏覽器自動填寫 multipart/form-data 及其 boundary
+          }
         });
 
-        this.$message.success(this.isEdit ? '資料更新成功' : '入園登記成功');
+        this.$message.success(this.isEdit ? '住民資料更新成功' : '入園登記成功');
         this.$emit('go-back');
       } catch (err) {
-        // 在控制台印出詳細錯誤，方便除錯
-        console.error('API Error Response:', err.response);
-        
-        const errorMsg = err.response?.data?.message || '儲存失敗，請檢查資料格式（可能是照片辨識失敗）';
-        this.$message.error(errorMsg);
+        // 捕獲並顯示詳細錯誤，幫助解決 415 問題
+        const msg = err.response?.data?.message || '資料格式錯誤或連線逾時';
+        this.$message.error(`儲存失敗：${msg}`);
       } finally {
         this.submitting = false;
       }
