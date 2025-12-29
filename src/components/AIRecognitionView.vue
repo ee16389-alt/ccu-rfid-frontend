@@ -12,7 +12,6 @@
             <img 
               :ref="'img-' + photo.photo_id"
               :src="photo.photo_url"
-              crossOrigin="anonymous"
               @load="drawBoxes(photo.photo_id)" 
               class="recognition-image"
             >
@@ -25,7 +24,7 @@
               @click="openCorrectionDialog(det)"
             >
               <span class="name-label" :class="{ 'is-edited': det.isEdited }">
-                {{ det.resident_name }} ({{ (det.confidence * 100).toFixed(0) }}%)
+                {{ det.resident_name }} ({{ det.confidence.toFixed(0) }}%)
               </span>
             </div>
           </div>
@@ -92,7 +91,6 @@ export default {
       const azureBase = 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net';
       
       try {
-        // 修正 1：將逾時提高到 120 秒，對應 AI 運算冷啟動延遲
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
           timeout: 120000 
         });
@@ -100,7 +98,6 @@ export default {
         if (response.data && response.data.length > 0) {
           this.rawResults = response.data.map(person => {
             person.photos = person.photos.map(pic => {
-              // 修正 2：補全路徑並加上時間戳防止快取
               if (pic.photo_url && !pic.photo_url.startsWith('http')) {
                 const cleanPath = pic.photo_url.replace(/^\/+/, '');
                 pic.photo_url = `${azureBase}/${cleanPath}?t=${new Date().getTime()}`;
@@ -110,7 +107,7 @@ export default {
             return person;
           });
         } else {
-          this.loadMockData(); 
+          this.loadMockResults(); 
         }
       } catch (err) {
         console.warn('AI API 獲取失敗，啟動示範模式', err);
@@ -126,9 +123,9 @@ export default {
       const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
       this.rawResults = [
         {
-          "resident_id": "3",
-          "resident_name": "江小信 (範例)",
-          "confidence": 0.95,
+          "id": "3",
+          "name": "江小信 (範例)",
+          "confidence": 95,
           "photos": [
             { "photo_id": 999, "photo_url": stableImageUrl, "bounding_box": [150, 300, 450, 600] }
           ]
@@ -139,13 +136,17 @@ export default {
     processData() {
       const map = {};
       this.rawResults.forEach(person => {
+        // 修正點 1：對應後端 JSON 欄位名稱
+        const resId = person.id;   
+        const resName = person.name; 
+
         person.photos.forEach(pic => {
           if (!map[pic.photo_id]) {
             map[pic.photo_id] = { photo_id: pic.photo_id, photo_url: pic.photo_url, detections: [] };
           }
           map[pic.photo_id].detections.push({
-            resident_id: person.resident_id,
-            resident_name: person.resident_name,
+            resident_id: resId,
+            resident_name: resName,
             confidence: person.confidence,
             rawBox: pic.bounding_box,
             boxStyle: {},
@@ -153,7 +154,10 @@ export default {
           });
         });
       });
-      this.processedPhotos = Object.values(map);
+      
+      // 修正點 2：只顯示最新上傳的一張照片
+      const sortedPhotos = Object.values(map).sort((a, b) => b.photo_id - a.photo_id);
+      this.processedPhotos = sortedPhotos.length > 0 ? [sortedPhotos[0]] : [];
     },
 
     drawBoxes(id) {
@@ -164,18 +168,33 @@ export default {
         
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 修正 3：修正座標轉換數學公式，解決紅框位移問題
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
+        const computedStyle = window.getComputedStyle(img);
+        const objectFit = computedStyle.getPropertyValue('object-fit');
 
         photo.detections.forEach(d => {
-          // 確保陣列順序對齊後端 [Top, Left, Bottom, Right]
           const [t, l, b, r] = d.rawBox;
+          let topOffset = 0;
+          let leftOffset = 0;
+
+          if (objectFit === 'cover') {
+            const renderRatio = img.clientWidth / img.clientHeight;
+            const naturalRatio = img.naturalWidth / img.naturalHeight;
+            if (renderRatio > naturalRatio) {
+              const scaledHeight = img.naturalHeight * sx;
+              topOffset = (img.clientHeight - scaledHeight) / 2;
+            } else {
+              const scaledWidth = img.naturalWidth * sy;
+              leftOffset = (img.clientWidth - scaledWidth) / 2;
+            }
+          }
+
           d.boxStyle = {
-            top: (t * sy) + 'px',
-            left: (l * sx) + 'px',
-            width: ((r - l) * sx) + 'px',
-            height: ((b - t) * sy) + 'px'
+            top: (t * (objectFit === 'cover' && leftOffset !== 0 ? sy : sy) + topOffset) + 'px',
+            left: (l * (objectFit === 'cover' && topOffset !== 0 ? sx : sx) + leftOffset) + 'px',
+            width: ((r - l) * (leftOffset !== 0 ? sy : sx)) + 'px',
+            height: ((b - t) * (topOffset !== 0 ? sx : sy)) + 'px'
           };
         });
         this.$forceUpdate();
@@ -225,6 +244,7 @@ export default {
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
+            // 提交時同樣使用 resident_id 以符合 API 期待
             payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
           });
         });
@@ -246,7 +266,7 @@ export default {
 <style scoped>
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }
 .image-wrapper { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.recognition-image { width: 100%; display: block; }
+.recognition-image { width: 100%; display: block; object-fit: cover; aspect-ratio: 4 / 3; }
 .face-box { position: absolute; border: 3px solid #FF9933; background-color: rgba(255, 153, 51, 0.1); cursor: pointer; transition: all 0.3s; z-index: 10; }
 .face-box:hover { border-color: #f56c6c; background-color: rgba(245, 108, 108, 0.2); }
 .name-label { position: absolute; top: -28px; left: -3px; background: #FF9933; color: white; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 4px 4px 0 0; }
