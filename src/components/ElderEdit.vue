@@ -18,7 +18,7 @@
                 :on-change="handleAvatarChange"
               >
                 <div v-if="imageUrl" class="avatar-preview-wrapper">
-                  <img :src="imageUrl" class="avatar-preview">
+                  <img :src="imageUrl" class="avatar-preview" crossorigin="anonymous">
                   <div class="avatar-mask">
                     <i class="el-icon-edit"></i>
                     <span>更換照片</span>
@@ -99,12 +99,12 @@ export default {
         this.elderForm = {
           name: res.data.name || '',
           age: res.data.age || 80,
-          // 修正：欄位名稱對齊同學提到的修改建議
-          rfid: res.data.rfid || '', 
+          rfid: res.data.rfid || '', // 修正：對齊後端 rfid
           remark: res.data.remark || ''
         };
         
-        if (res.data.avatar) { // 修正：對齊 item.avatar
+        // 修正：處理圖片路徑，若是 Firebase 連結則直接顯示
+        if (res.data.avatar) {
           this.imageUrl = res.data.avatar.startsWith('http') 
             ? res.data.avatar 
             : `${azureBase}${res.data.avatar}?t=${new Date().getTime()}`;
@@ -124,12 +124,10 @@ export default {
         this.$message.warning('請填寫住民姓名');
         return;
       }
-
       this.submitting = true;
 
       try {
-        // --- 階段 1: 更新基本資料 (使用 JSON 格式發送) ---
-        // 將資料封裝為純物件，Axios 會自動以 application/json 發送，避開 415 錯誤
+        // --- 階段 1: 更新基本資料 (使用 JSON 以避免 415 錯誤) ---
         const residentPayload = {
           name: String(this.elderForm.name),
           age: Number(this.elderForm.age),
@@ -148,10 +146,9 @@ export default {
 
         const targetId = this.isEdit ? this.elderId : res.data.id;
 
-        // --- 階段 2: 照片處理 (單獨發送 FormData) ---
+        // --- 階段 2: 照片處理 (單獨使用 FormData) ---
         if (this.selectedFile && targetId) {
           const avatarFormData = new FormData();
-          // 同學建議欄位為 avatar
           avatarFormData.append('file', this.selectedFile); 
 
           await this.$http({
@@ -163,15 +160,11 @@ export default {
         }
 
         this.$message.success(this.isEdit ? '資料與照片更新成功' : '新增登記成功');
-        
-        setTimeout(() => {
-          this.$emit('go-back');
-        }, 1000);
+        setTimeout(() => { this.$emit('go-back'); }, 1000);
 
       } catch (err) {
         console.error('Submit Error:', err.response);
-        const errorMsg = err.response?.data?.message || '儲存失敗，請確認資料格式或網路連線';
-        this.$message.error(errorMsg);
+        this.$message.error(err.response?.data?.message || '儲存失敗');
       } finally {
         this.submitting = false;
       }
@@ -185,6 +178,8 @@ export default {
 .header-section { display: flex; align-items: center; margin-bottom: 25px; }
 .avatar-col { display: flex; justify-content: center; }
 .avatar-group { display: flex; flex-direction: column; align-items: center; }
+
+/* 上傳框與預覽 */
 .avatar-uploader {
   width: 200px; height: 200px;
   border: 2px dashed #dcdfe6; border-radius: 50%;
@@ -193,14 +188,28 @@ export default {
   display: flex; justify-content: center; align-items: center;
 }
 .avatar-uploader /deep/ .el-upload { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+.avatar-preview-wrapper { position: relative; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; }
 .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* 遮罩邏輯優化：修正蓋住照片的問題 */
 .avatar-mask {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.5); color: #fff;
   display: flex; flex-direction: column; justify-content: center; align-items: center;
-  opacity: 0; transition: opacity 0.3s;
+  
+  /* 初始狀態隱藏，且不阻擋滑鼠點擊圖片 */
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  pointer-events: none; 
 }
-.avatar-uploader:hover .avatar-mask { opacity: 1; }
+
+/* 僅在滑鼠移入上傳區域時顯現遮罩 */
+.avatar-uploader:hover .avatar-mask {
+  opacity: 1;
+  visibility: visible;
+}
+
 .upload-guide { margin-top: 20px; text-align: center; }
 .guide-text { font-size: 12px; color: #909399; margin-top: 8px; }
 .form-actions { margin-top: 40px; text-align: center; padding-top: 30px; border-top: 1px dashed #e9e0d6; }

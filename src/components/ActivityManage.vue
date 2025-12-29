@@ -82,14 +82,6 @@
               
               <div class="button-group">
                 <el-button 
-                  type="primary" 
-                  plain
-                  class="manage-btn" 
-                  icon="el-icon-edit-outline" 
-                  @click="$emit('go-screening')"
-                >校對身分標籤</el-button>
-
-                <el-button 
                   type="success" 
                   class="pulse-btn" 
                   icon="el-icon-picture" 
@@ -130,7 +122,7 @@
           </div>
         </el-card>
       </el-col>
-    </row>
+    </el-row>
   </div>
 </template>
 
@@ -162,12 +154,11 @@ export default {
       if (this.activityForm.photoCount === 0) return 0;
       return Math.floor((this.analyzedCount / this.activityForm.photoCount) * 100);
     },
-    // 修正點：從 this.$http.defaults.baseURL 動態獲取，避免硬編碼路徑
     getUploadUrl() {
       const baseUrl = this.$http.defaults.baseURL;
+      // 自動對齊 API 端點路徑
       return `${baseUrl}/Activity/${this.activityForm.id}/UploadBatch`;
     },
-    // 修正點：顯式帶入 Token，供 el-upload 組件使用
     uploadHeaders() {
       return {
         'Authorization': `Bearer ${localStorage.getItem('userToken')}`
@@ -182,7 +173,7 @@ export default {
       }
       this.submitting = true;
       try {
-        // 修正點：發送 JSON 格式的基本資料，移除多餘路徑
+        // 使用相對路徑與 JSON 格式，避開 415 錯誤
         const res = await this.$http.post('/Activity', this.activityForm);
         
         this.activityForm.id = res.data.id;
@@ -198,7 +189,7 @@ export default {
     handleUploadSuccess() {
       this.$message.success('照片上傳成功');
       this.activityForm.photoCount++;
-      // 模擬 AI 分析進度提升
+      // 模擬 AI 進度更新
       setTimeout(() => { this.analyzedCount++; }, 1500);
     },
     handleUploadError(err) {
@@ -210,7 +201,6 @@ export default {
 </script>
 
 <style scoped>
-/* 樣式部分保持不變 */
 .form-tip { font-size: 12px; color: #909399; margin-top: 4px; line-height: 1.4; }
 .activity-manage-container { padding: 15px; background-color: #fcfaf8; min-height: 80vh; }
 .header-section { display: flex; align-items: center; margin-bottom: 25px; }
@@ -225,7 +215,6 @@ export default {
 .upload-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 350px; color: #909399; }
 .placeholder-icon-wrap { width: 120px; height: 120px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; color: #c0c4cc; }
 .button-group { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
-.manage-btn { width: 100%; font-weight: bold; }
 @keyframes pulse-green {
   0% { box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.6); transform: scale(1); }
   50% { box-shadow: 0 0 0 10px rgba(103, 194, 58, 0); transform: scale(1.02); }

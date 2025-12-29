@@ -20,6 +20,7 @@
             <el-avatar 
               :size="50"
               :src="scope.row.avatar || getDefaultAvatar()"
+              crossorigin="anonymous"
               style="border: 2px solid #f0e6da; background-color: #eee;"
             >
               {{ scope.row.name ? scope.row.name.charAt(0) : 'U' }}
@@ -93,21 +94,25 @@ export default {
           this.elderList = res.data.map(item => {
             let finalAvatar = null;
             
-            // 修正點 1：根據同學提供的修改建議，將 avatar_url 改為 avatar
+            // 修正點：優先讀取後端實際回傳的 avatar 欄位
             const avatarField = item.avatar || item.avatar_url; 
             
             if (avatarField) {
               const timestamp = new Date().getTime();
-              finalAvatar = avatarField.startsWith('http') 
-                ? `${avatarField}?t=${timestamp}`
-                : `${azureBase}${avatarField}?t=${timestamp}`;
+              // 修正點：如果是 Firebase 連結 (http) 則跳過 Azure 拼接
+              if (avatarField.startsWith('http')) {
+                finalAvatar = `${avatarField}${avatarField.includes('?') ? '&' : '?'}t=${timestamp}`;
+              } else {
+                const cleanPath = avatarField.startsWith('/') ? avatarField.substring(1) : avatarField;
+                finalAvatar = `${azureBase}/${cleanPath}?t=${timestamp}`;
+              }
             }
 
             return {
               id: item.id,
               name: item.name,
               age: item.age,
-              // 修正點 2：根據同學建議，將讀取來源從 rfid_uid 改為 rfid
+              // 修正點：對接至後端正確的 rfid 欄位
               rfid: item.rfid, 
               avatar: finalAvatar 
             };

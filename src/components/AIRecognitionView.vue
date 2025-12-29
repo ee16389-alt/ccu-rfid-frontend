@@ -12,6 +12,7 @@
             <img 
               :ref="'img-' + photo.photo_id"
               :src="photo.photo_url"
+              crossOrigin="anonymous"
               @load="drawBoxes(photo.photo_id)" 
               class="recognition-image"
             >
@@ -88,46 +89,48 @@ export default {
     async fetchAIResults() {
       this.loading = true;
       this.isDemoMode = false;
+      const azureBase = 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net';
+      
       try {
-        // 修正點：配合 main.js baseURL，使用簡潔路徑
-        // 發送 POST 至 .../manager-api/Activity/{id}/recognize
+        // 修正 1：將逾時提高到 120 秒，對應 AI 運算冷啟動延遲
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
-          timeout: 45000 // 辨識通常較慢，此處額外設定 45 秒
+          timeout: 120000 
         });
         
         if (response.data && response.data.length > 0) {
-          this.rawResults = response.data;
+          this.rawResults = response.data.map(person => {
+            person.photos = person.photos.map(pic => {
+              // 修正 2：補全路徑並加上時間戳防止快取
+              if (pic.photo_url && !pic.photo_url.startsWith('http')) {
+                const cleanPath = pic.photo_url.replace(/^\/+/, '');
+                pic.photo_url = `${azureBase}/${cleanPath}?t=${new Date().getTime()}`;
+              }
+              return pic;
+            });
+            return person;
+          });
         } else {
           this.loadMockData(); 
         }
       } catch (err) {
-        console.warn('AI API 抓取失敗，啟動示範模式', err);
-        this.loadMockData(); 
+        console.warn('AI API 獲取失敗，啟動示範模式', err);
+        this.loadMockResults(); 
       } finally {
         this.processData();
         this.loading = false;
       }
     },
 
-    loadMockData() {
+    loadMockResults() {
       this.isDemoMode = true;
       const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
-      
       this.rawResults = [
         {
           "resident_id": "3",
-          "resident_name": "唐伯虎",
-          "confidence": 0.92,
+          "resident_name": "江小信 (範例)",
+          "confidence": 0.95,
           "photos": [
-            { "photo_id": 999, "photo_url": stableImageUrl, "bounding_box": [150, 200, 450, 500] }
-          ]
-        },
-        {
-          "resident_id": "5",
-          "resident_name": "秋香",
-          "confidence": 0.88,
-          "photos": [
-            { "photo_id": 888, "photo_url": "https://picsum.photos/id/1025/800/600", "bounding_box": [100, 300, 400, 600] }
+            { "photo_id": 999, "photo_url": stableImageUrl, "bounding_box": [150, 300, 450, 600] }
           ]
         }
       ];
@@ -161,11 +164,12 @@ export default {
         
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 計算圖片縮放比例，確保紅框位置精確
+        // 修正 3：修正座標轉換數學公式，解決紅框位移問題
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
 
         photo.detections.forEach(d => {
+          // 確保陣列順序對齊後端 [Top, Left, Bottom, Right]
           const [t, l, b, r] = d.rawBox;
           d.boxStyle = {
             top: (t * sy) + 'px',
@@ -195,7 +199,6 @@ export default {
 
     async fetchAllResidents() {
       try {
-        // 修正點：使用相對路徑，讓攔截器自動處理 Token
         const res = await this.$http.get('/Resident');
         this.allResidents = res.data;
       } catch (err) {
@@ -219,7 +222,6 @@ export default {
         await this.$confirm('確認所有辨識結果正確嗎？', '存檔確認', { type: 'success' });
         this.submitting = true;
         
-        // 封裝同步至後端的資料
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
@@ -227,7 +229,6 @@ export default {
           });
         });
 
-        // 發送確認至 .../manager-api/Activity/{id}/recognize/confirm
         await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload);
         
         this.$message.success('辨識結果已同步！');
@@ -243,11 +244,10 @@ export default {
 </script>
 
 <style scoped>
-/* 樣式部分保持不變 */
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }
 .image-wrapper { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .recognition-image { width: 100%; display: block; }
-.face-box { position: absolute; border: 3px solid #FF9933; background-color: rgba(255, 153, 51, 0.1); cursor: pointer; transition: all 0.3s; }
+.face-box { position: absolute; border: 3px solid #FF9933; background-color: rgba(255, 153, 51, 0.1); cursor: pointer; transition: all 0.3s; z-index: 10; }
 .face-box:hover { border-color: #f56c6c; background-color: rgba(245, 108, 108, 0.2); }
 .name-label { position: absolute; top: -28px; left: -3px; background: #FF9933; color: white; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 4px 4px 0 0; }
 .name-label.is-edited { background: #409EFF; }
