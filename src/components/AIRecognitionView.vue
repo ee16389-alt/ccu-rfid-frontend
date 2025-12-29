@@ -88,12 +88,11 @@ export default {
     async fetchAIResults() {
       this.loading = true;
       this.isDemoMode = false;
-      const token = localStorage.getItem('userToken');
       try {
-        // 修正點：移除多餘的 /manager-api 前綴，避免 404
+        // 修正點：配合 main.js baseURL，使用簡潔路徑
+        // 發送 POST 至 .../manager-api/Activity/{id}/recognize
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
-          headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 30000 
+          timeout: 45000 // 辨識通常較慢，此處額外設定 45 秒
         });
         
         if (response.data && response.data.length > 0) {
@@ -102,7 +101,7 @@ export default {
           this.loadMockData(); 
         }
       } catch (err) {
-        console.warn('API 抓取失敗，啟動示範模式', err);
+        console.warn('AI API 抓取失敗，啟動示範模式', err);
         this.loadMockData(); 
       } finally {
         this.processData();
@@ -112,7 +111,6 @@ export default {
 
     loadMockData() {
       this.isDemoMode = true;
-      // 使用穩定的 GitHub Pages 絕對網址
       const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
       
       this.rawResults = [
@@ -163,6 +161,7 @@ export default {
         
         if (!img || !photo || img.naturalWidth === 0) return;
 
+        // 計算圖片縮放比例，確保紅框位置精確
         const sx = img.clientWidth / img.naturalWidth;
         const sy = img.clientHeight / img.naturalHeight;
 
@@ -196,11 +195,8 @@ export default {
 
     async fetchAllResidents() {
       try {
-        const token = localStorage.getItem('userToken');
-        // 修正點：配合 baseURL，路徑改為單層
-        const res = await this.$http.get('/Resident', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // 修正點：使用相對路徑，讓攔截器自動處理 Token
+        const res = await this.$http.get('/Resident');
         this.allResidents = res.data;
       } catch (err) {
         this.$message.error('無法獲取長者清單');
@@ -222,17 +218,18 @@ export default {
       try {
         await this.$confirm('確認所有辨識結果正確嗎？', '存檔確認', { type: 'success' });
         this.submitting = true;
+        
+        // 封裝同步至後端的資料
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
             payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
           });
         });
-        const token = localStorage.getItem('userToken');
-        // 修正點：路徑統一使用單層
-        await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+
+        // 發送確認至 .../manager-api/Activity/{id}/recognize/confirm
+        await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload);
+        
         this.$message.success('辨識結果已同步！');
         this.$emit('go-back');
       } catch (error) {
@@ -246,6 +243,7 @@ export default {
 </script>
 
 <style scoped>
+/* 樣式部分保持不變 */
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }
 .image-wrapper { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .recognition-image { width: 100%; display: block; }

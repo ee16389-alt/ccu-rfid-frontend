@@ -52,8 +52,6 @@
 </template>
 
 <script>
-// 修正點 1：移除手動導入的 axios，統一使用掛載於全域的 this.$http
-
 export default {
   name: 'Login',
   data() {
@@ -64,6 +62,7 @@ export default {
   },
   methods: {
     async handleLogin() {
+      // 驗證欄位是否填寫
       if (!this.loginForm.account || !this.loginForm.password) {
         this.$message.warning('請完整輸入帳號密碼');
         return;
@@ -71,12 +70,11 @@ export default {
 
       this.loading = true;
       try {
-        // 修正點 2：改用相對路徑 /Admin/login。
-        // 這會配合 main.js 的 baseURL 拼接成正確的 https://.../manager-api/Admin/login。
+        // 修正：發送相對路徑請求，攔截器會自動注入 baseURL
         const res = await this.$http.post('/Admin/login', this.loginForm);
 
         if (res.data && res.data.access_token) {
-          // 儲存 Token 供後續所有組件使用
+          // 儲存 Token 供全域攔截器使用
           localStorage.setItem('userToken', res.data.access_token);
           
           this.$message({
@@ -85,16 +83,18 @@ export default {
             duration: 2000
           });
           
+          // 通知 App.vue 切換至主畫面
           this.$emit('login-success');
         }
       } catch (err) {
         console.error('Login Error:', err);
         const status = err.response ? err.response.status : null;
+        
         if (status === 401) {
           this.$message.error('帳號或密碼錯誤，請重新輸入');
         } else {
-          // 修正點 3：此時會套用 main.js 的 30 秒超時邏輯，解決 Azure 冷啟動問題。
-          this.$message.error('系統連線失敗，請檢查網路狀態或伺服器負載');
+          // 配合 main.js 處理冷啟動逾時
+          this.$message.error('連線失敗：伺服器啟動中或網路異常');
         }
       } finally {
         this.loading = false;
@@ -105,7 +105,7 @@ export default {
 </script>
 
 <style scoped>
-/* 樣式部分保持不變 */
+/* 保持原有美觀樣式 */
 .login-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f7f3ed; }
 .login-box { display: flex; width: 900px; min-height: 580px; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
 .login-image-side { flex: 1.2; position: relative; background-color: #f0e6da; }

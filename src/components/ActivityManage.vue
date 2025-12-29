@@ -130,13 +130,11 @@
           </div>
         </el-card>
       </el-col>
-    </el-row>
+    </row>
   </div>
 </template>
 
 <script>
-// 修正點 1：不需要手動導入 axios，改用掛載於 Vue 原型的 this.$http
-
 export default {
   name: 'ActivityManage',
   props: ['selectedActivity'], 
@@ -150,9 +148,9 @@ export default {
         activity_at: this.selectedActivity?.activity_at || '',
         location: this.selectedActivity?.location || '',
         rfid: this.selectedActivity?.rfid || '', 
-        photoCount: this.selectedActivity?.photo_count || 0
+        photoCount: this.selectedActivity?.photoCount || 0
       },
-      analyzedCount: this.selectedActivity?.photo_count || 0,
+      analyzedCount: this.selectedActivity?.photoCount || 0,
       customColors: [
         { color: '#f56c6c', percentage: 20 },
         { color: '#67c23a', percentage: 100 }
@@ -164,12 +162,12 @@ export default {
       if (this.activityForm.photoCount === 0) return 0;
       return Math.floor((this.analyzedCount / this.activityForm.photoCount) * 100);
     },
-    // 修正點 2：改為 computed 屬性，並從 this.$http 獲取 baseURL
+    // 修正點：從 this.$http.defaults.baseURL 動態獲取，避免硬編碼路徑
     getUploadUrl() {
       const baseUrl = this.$http.defaults.baseURL;
       return `${baseUrl}/Activity/${this.activityForm.id}/UploadBatch`;
     },
-    // 修正點 3：統一從攔截器獲取認證資訊，此處僅作為上傳組件所需
+    // 修正點：顯式帶入 Token，供 el-upload 組件使用
     uploadHeaders() {
       return {
         'Authorization': `Bearer ${localStorage.getItem('userToken')}`
@@ -184,15 +182,15 @@ export default {
       }
       this.submitting = true;
       try {
-        // 修正點 4：使用相對路徑 '/Activity'，避免路徑重複
+        // 修正點：發送 JSON 格式的基本資料，移除多餘路徑
         const res = await this.$http.post('/Activity', this.activityForm);
         
         this.activityForm.id = res.data.id;
         this.isNewActivity = false;
         this.$message.success('活動檔案已建立，且已綁定 RFID');
       } catch (err) {
-        // 配合 main.js 處理逾時，此處可做特定提示
-        this.$message.error('系統連線失敗或回應超時');
+        console.error('Create Activity Error:', err.response);
+        this.$message.error('活動建立失敗，請檢查欄位格式或連線狀態');
       } finally {
         this.submitting = false;
       }
@@ -200,10 +198,12 @@ export default {
     handleUploadSuccess() {
       this.$message.success('照片上傳成功');
       this.activityForm.photoCount++;
+      // 模擬 AI 分析進度提升
       setTimeout(() => { this.analyzedCount++; }, 1500);
     },
-    handleUploadError() {
-      this.$message.error('上傳失敗，請檢查網路或檔案大小');
+    handleUploadError(err) {
+      console.error('Upload Error:', err);
+      this.$message.error('上傳失敗，請確認檔案大小或伺服器狀態');
     }
   }
 };

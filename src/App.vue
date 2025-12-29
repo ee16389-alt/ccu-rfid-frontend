@@ -15,14 +15,14 @@
 
       <ActivityMenu 
         v-else-if="currentView === 'ActivityMenu'" 
-        :rfid_uid="selectedRfid"
+        :rfid="selectedRfid"
         @select-activity="onSelectActivity"
         @go-back="currentView = 'RFIDLanding'"
       />
 
       <Slideshow 
         v-else-if="currentView === 'Slideshow'" 
-        :rfid_uid="selectedRfid" 
+        :rfid="selectedRfid" 
         :activityId="selectedActivityId"
         @go-back="currentView = 'ActivityMenu'"
       />
@@ -84,6 +84,7 @@
 </template>
 
 <script>
+// 導入所有組件
 import RFIDLanding from './components/RFIDLanding.vue';
 import ActivityMenu from './components/ActivityMenu.vue';
 import Slideshow from './components/Slideshow.vue';
@@ -113,45 +114,38 @@ export default {
     };
   },
   computed: {
-    // --- 修正後的 isAdminView ---
-isAdminView() {
-  const adminPages = [
-    'ActivityList', 
-    'ElderList', 
-    'ActivityManage', 
-    'ElderEdit', 
-    'AIScreening', 
-    'AIRecognition' // 確保這裡對應到 currentView 設定的字串
-  ];
-  return adminPages.includes(this.currentView);
-}
+    // 修正點：動態判斷管理端頁面身分
+    isAdminView() {
+      const adminPages = [
+        'ActivityList', 
+        'ElderList', 
+        'ActivityManage', 
+        'ElderEdit', 
+        'AIScreening', 
+        'AIRecognition'
+      ];
+      return adminPages.includes(this.currentView);
+    }
   },
   methods: {
-    // 核心調整：智慧跳轉邏輯
+    // 修正點：統一使用 rfid 變數名對接後端
     onScanSuccess(payload) {
-      // payload 格式: { rfid: '...', match: {...}, activities: [...] }
       this.selectedRfid = payload.rfid;
       
-      // 判斷 RFID 類型
       if (payload.match && payload.match.type === 'activity') {
-        // 活動卡：直接鎖定該活動 ID 並播放
         this.selectedActivityId = payload.match.id;
         this.currentView = 'Slideshow';
       } else {
-        // 長輩卡：跳轉至活動選擇牆
         this.currentView = 'ActivityMenu';
       }
     },
 
-    // 照片牆點擊跳轉
     onSelectActivity(payload) {
-      // payload 格式: { activityId: '...', rfid: '...' }
       this.selectedActivityId = payload.activityId;
       this.selectedRfid = payload.rfid; 
       this.currentView = 'Slideshow';
     },
 
-    // 行政管理邏輯 (保持對接 Swagger 路徑)
     onManageActivity(id) {
       this.selectedActivityId = id;
       this.activeActivityObject = { id: id }; 
@@ -175,7 +169,7 @@ isAdminView() {
     },
 
     logout() {
-      localStorage.removeItem('userToken'); // 配合 main.js 攔截器
+      localStorage.removeItem('userToken');
       this.currentView = 'Login';
       this.$message.info('已安全登出');
     }
@@ -184,7 +178,7 @@ isAdminView() {
 </script>
 
 <style>
-/* 全域基本樣式 */
+/* 全域基本樣式修正 */
 body { margin: 0; font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Arial",sans-serif; }
 .debug-toolbar { 
   position: fixed; top: 0; width: 100%; z-index: 2000; background: #333; 

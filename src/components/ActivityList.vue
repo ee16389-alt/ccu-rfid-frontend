@@ -53,8 +53,6 @@
 </template>
 
 <script>
-// 修正點 1：不需要再手動 import axios，改用 main.js 掛載的 this.$http
-
 export default {
   name: 'ActivityList',
   data() {
@@ -69,15 +67,17 @@ export default {
   methods: {
     async fetchActivities() {
       this.loading = true;
-      // 修正點 2：Token 已經在 main.js 的攔截器中全域處理，這裡可以精簡
       
       try {
-        // 修正點 3：移除完整網址與重複的 /manager-api，改用相對路徑
-        // 配合 main.js 的 baseURL，這會自動請求至 .../manager-api/Activity
+        // 修正點 2: 使用簡潔相對路徑，讓 main.js 的 baseURL 處理前綴
         const response = await this.$http.get('/Activity');
         
         if (response.data && response.data.length > 0) {
-          this.activities = response.data;
+          // 修正點 3: 確保對應後端的 RFID 欄位
+          this.activities = response.data.map(item => ({
+            ...item,
+            rfid: item.rfid || '' 
+          }));
         } else {
           this.loadMockData();
         }

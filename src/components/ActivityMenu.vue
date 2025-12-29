@@ -42,7 +42,8 @@
 <script>
 export default {
   name: 'ActivityMenu',
-  props: ['rfid_uid'], 
+  // 修正點 2: 將 props 名稱從 rfid_uid 統一改為 rfid
+  props: ['rfid'], 
   data() {
     return {
       loading: false,
@@ -51,7 +52,8 @@ export default {
     };
   },
   mounted() {
-    if (this.rfid_uid) {
+    // 修正點 3: 檢查 rfid 變數
+    if (this.rfid) {
       this.fetchDataByRfid();
     } else {
       this.loadMockActivities();
@@ -65,9 +67,9 @@ export default {
     async fetchDataByRfid() {
       this.loading = true;
       try {
-        // 修正點 1：移除 /api/ 前綴。
-        // 如果您的 main.js baseURL 是 /manager-api，系統會自動拼成 /manager-api/rfid/{id}。
-        const response = await this.$http.get(`/rfid/${this.rfid_uid}`);
+        // 修正點 4: 移除 /api/，路徑與 main.js 的 baseURL 對接
+        // 發送至 /manager-api/rfid/{rfid}
+        const response = await this.$http.get(`/rfid/${this.rfid}`);
         
         // 1. 取得長輩身分資訊
         if (response.data.match && response.data.match.length > 0) {
@@ -105,7 +107,8 @@ export default {
     handleSelectActivity(activity) {
       this.$emit('select-activity', {
         activityId: activity.id,
-        rfid: this.rfid_uid
+        // 修正點 5: 傳遞變數名改為 rfid
+        rfid: this.rfid
       });
     },
     

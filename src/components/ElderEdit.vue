@@ -25,8 +25,9 @@
                   </div>
                 </div>
                 <div v-else class="uploader-placeholder">
-                  <i class="el-icon-user avatar-uploader-icon"></i>
-                  <span>上傳大頭照</span>
+                  <i class="el-icon-user avatar-uploader-icon" style="font-size: 40px; color: #dcdfe6;"></i>
+                  <br>
+                  <span style="color: #909399; font-size: 14px;">上傳大頭照</span>
                 </div>
               </el-upload>
               <div class="upload-guide">
@@ -48,20 +49,20 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="RFID 辨識編號">
-                  <el-input v-model="elderForm.rfid_uid" placeholder="請填寫序號進行測試">
+                  <el-input v-model="elderForm.rfid" placeholder="請填寫或感應卡片">
                     <i slot="prefix" class="el-icon-postcard"></i>
                   </el-input>
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="住民健康與生活備註">
-              <el-input type="textarea" v-model="elderForm.remark" rows="5"></el-input>
+              <el-input type="textarea" v-model="elderForm.remark" rows="5" placeholder="例如：患有高血壓，需定時服藥..."></el-input>
             </el-form-item>
           </el-col>
-        </row>
+        </el-row>
 
         <div class="form-actions">
-          <el-button type="success" @click="submitForm" :loading="submitting" icon="el-icon-folder-checked">
+          <el-button type="success" @click="submitForm" :loading="submitting" icon="el-icon-folder-checked" style="background-color: #67c23a; border-color: #67c23a;">
             {{ isEdit ? '更新住民檔案' : '確認入園並建立檔案' }}
           </el-button>
           <el-button @click="$emit('go-back')">取消返回</el-button>
@@ -77,7 +78,7 @@ export default {
   props: ['elderId'],
   data() {
     return {
-      elderForm: { name: '', age: 80, rfid_uid: '', remark: '' },
+      elderForm: { name: '', age: 80, rfid: '', remark: '' },
       imageUrl: '', 
       selectedFile: null,
       submitting: false,
@@ -92,23 +93,32 @@ export default {
   },
   methods: {
     async fetchElderData() {
+      const azureBase = 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net';
       try {
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name || '',
-          age: parseInt(res.data.age) || 80, // 強制整數轉型
-          rfid_uid: res.data.rfid_uid || '',
+          age: res.data.age || 80,
+          // 修正：欄位名稱對齊同學提到的修改建議
+          rfid: res.data.rfid || '', 
           remark: res.data.remark || ''
         };
-        this.imageUrl = res.data.avatar_url || '';
+        
+        if (res.data.avatar) { // 修正：對齊 item.avatar
+          this.imageUrl = res.data.avatar.startsWith('http') 
+            ? res.data.avatar 
+            : `${azureBase}${res.data.avatar}?t=${new Date().getTime()}`;
+        }
       } catch (err) {
         this.$message.error('讀取住民資料失敗');
       }
     },
+
     handleAvatarChange(file) {
       this.selectedFile = file.raw;
       this.imageUrl = URL.createObjectURL(file.raw);
     },
+
     async submitForm() {
       if (!this.elderForm.name) {
         this.$message.warning('請填寫住民姓名');
@@ -116,36 +126,52 @@ export default {
       }
 
       this.submitting = true;
-      const formData = new FormData();
-      
-      // 依據 Swagger 規格封裝與強轉型
-      formData.append('Name', String(this.elderForm.name));
-      formData.append('Age', parseInt(this.elderForm.age)); // 關鍵：轉為整數
-      formData.append('RfidUid', this.elderForm.rfid_uid ? String(this.elderForm.rfid_uid) : 'DEMO_001'); // 避免空值
-      formData.append('Remark', this.elderForm.remark ? String(this.elderForm.remark) : '');
-      
-      if (this.selectedFile) {
-        formData.append('Avatar', this.selectedFile); 
-      }
 
       try {
-        const url = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
-        const method = this.isEdit ? 'put' : 'post';
-        
-        // 核心對接邏輯：headers 留空讓 axios 自動處理
-        await this.$http({
-          method: method,
-          url: url,
-          data: formData,
-          headers: {} 
+        // --- 階段 1: 更新基本資料 (使用 JSON 格式發送) ---
+        // 將資料封裝為純物件，Axios 會自動以 application/json 發送，避開 415 錯誤
+        const residentPayload = {
+          name: String(this.elderForm.name),
+          age: Number(this.elderForm.age),
+          remark: this.elderForm.remark || "",
+          rfid: this.elderForm.rfid || "" // 修正：使用 rfid
+        };
+
+        const residentUrl = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
+        const residentMethod = this.isEdit ? 'put' : 'post';
+
+        const res = await this.$http({
+          method: residentMethod,
+          url: residentUrl,
+          data: residentPayload
         });
 
-        this.$message.success(this.isEdit ? '資料更新成功' : '新增登記成功');
-        this.$emit('go-back');
+        const targetId = this.isEdit ? this.elderId : res.data.id;
+
+        // --- 階段 2: 照片處理 (單獨發送 FormData) ---
+        if (this.selectedFile && targetId) {
+          const avatarFormData = new FormData();
+          // 同學建議欄位為 avatar
+          avatarFormData.append('file', this.selectedFile); 
+
+          await this.$http({
+            method: 'post',
+            url: `/Resident/${targetId}/UploadAvatar`,
+            data: avatarFormData,
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        }
+
+        this.$message.success(this.isEdit ? '資料與照片更新成功' : '新增登記成功');
+        
+        setTimeout(() => {
+          this.$emit('go-back');
+        }, 1000);
+
       } catch (err) {
         console.error('Submit Error:', err.response);
-        const msg = err.response?.data?.message || '資料格式錯誤或後端 API 暫時無法處理 PUT 檔案上傳';
-        this.$message.error(`儲存失敗：${msg}`);
+        const errorMsg = err.response?.data?.message || '儲存失敗，請確認資料格式或網路連線';
+        this.$message.error(errorMsg);
       } finally {
         this.submitting = false;
       }
@@ -168,6 +194,13 @@ export default {
 }
 .avatar-uploader /deep/ .el-upload { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
 .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-mask {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); color: #fff;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.avatar-uploader:hover .avatar-mask { opacity: 1; }
 .upload-guide { margin-top: 20px; text-align: center; }
 .guide-text { font-size: 12px; color: #909399; margin-top: 8px; }
 .form-actions { margin-top: 40px; text-align: center; padding-top: 30px; border-top: 1px dashed #e9e0d6; }

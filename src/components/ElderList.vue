@@ -34,10 +34,10 @@
         </el-table-column>
         <el-table-column prop="age" label="年齡" width="100" align="center"></el-table-column>
         
-        <el-table-column prop="rfid_uid" label="RFID 卡號 (辨識 ID)" min-width="150">
+        <el-table-column prop="rfid" label="RFID 卡號 (辨識 ID)" min-width="150">
           <template slot-scope="scope">
-            <el-tag v-if="scope.row.rfid_uid" size="medium" type="success" effect="plain">
-              <i class="el-icon-postcard"></i> {{ scope.row.rfid_uid }}
+            <el-tag v-if="scope.row.rfid" size="medium" type="success" effect="plain">
+              <i class="el-icon-postcard"></i> {{ scope.row.rfid }}
             </el-tag>
             <el-tag v-else size="medium" type="info" effect="plain">尚未綁定</el-tag>
           </template>
@@ -84,28 +84,39 @@ export default {
 
     async fetchElders() {
       this.loading = true;
+      const azureBase = 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net';
       
-      // 修正點 1：不再需要手動檢查 Token 或寫入 Header。
-      // main.js 的攔截器會自動為我們處理 Token 注入與 401 登入檢查。
-
       try {
-        // 修正點 2：移除多餘的 /manager-api，改用相對路徑。
-        // 配合 main.js 的 baseURL，這會精準發送到 https://.../manager-api/Resident
         const res = await this.$http.get('/Resident');
 
         if (res.data && res.data.length > 0) {
-          this.elderList = res.data.map(item => ({
-            id: item.id,
-            name: item.name,
-            age: item.age,
-            rfid_uid: item.rfid_uid, 
-            avatar: item.avatar_url 
-          }));
+          this.elderList = res.data.map(item => {
+            let finalAvatar = null;
+            
+            // 修正點 1：根據同學提供的修改建議，將 avatar_url 改為 avatar
+            const avatarField = item.avatar || item.avatar_url; 
+            
+            if (avatarField) {
+              const timestamp = new Date().getTime();
+              finalAvatar = avatarField.startsWith('http') 
+                ? `${avatarField}?t=${timestamp}`
+                : `${azureBase}${avatarField}?t=${timestamp}`;
+            }
+
+            return {
+              id: item.id,
+              name: item.name,
+              age: item.age,
+              // 修正點 2：根據同學建議，將讀取來源從 rfid_uid 改為 rfid
+              rfid: item.rfid, 
+              avatar: finalAvatar 
+            };
+          });
         } else {
           this.setMockData();
         }
       } catch (err) {
-        console.warn('API 連線失敗，載入展示模式');
+        console.warn('API 連線失敗，載入展示模式', err);
         this.setMockData(); 
       } finally {
         this.loading = false;
@@ -118,14 +129,14 @@ export default {
           id: 'm1', 
           name: 'James Wilson', 
           age: 82, 
-          rfid_uid: '116A2434', 
+          rfid: '116A2434', 
           avatar: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=150&q=80' 
         },
         { 
           id: 'm2', 
           name: '唐伯虎', 
           age: 75, 
-          rfid_uid: '8A303053', 
+          rfid: '8A303053', 
           avatar: 'https://images.unsplash.com/photo-1544144433-d50aff500b91?auto=format&fit=crop&w=150&q=80' 
         }
       ];
