@@ -72,8 +72,6 @@
 </template>
 
 <script>
-// 修正點 1：完全移除手動 axios 導入，改用掛載於 Vue 原型的 this.$http
-
 export default {
   name: 'ElderEdit',
   props: ['elderId'],
@@ -95,7 +93,6 @@ export default {
   methods: {
     async fetchElderData() {
       try {
-        // 修正點 2：移除 /manager-api，配合 baseURL 自動拼接
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name,
@@ -120,41 +117,39 @@ export default {
 
       this.submitting = true;
       
-      // 使用 FormData 處理包含檔案的請求
       const formData = new FormData();
-      formData.append('Name', this.elderForm.name);
-      formData.append('Age', this.elderForm.age);
-      // 確保 RFID 不為空字串或 null，避免後端格式校驗失敗
-      formData.append('RfidUid', this.elderForm.rfid_uid || ''); 
-      formData.append('Remark', this.elderForm.remark || '');
+      // 根據後端可能的大小寫規範調整
+      formData.append('name', this.elderForm.name);
+      formData.append('age', this.elderForm.age);
+      formData.append('rfid_uid', this.elderForm.rfid_uid || ''); 
+      formData.append('remark', this.elderForm.remark || '');
       
       if (this.selectedFile) {
+        // 請確認後端接收檔案的 Key 名稱，如果是 'Avatar' 則維持不變
         formData.append('Avatar', this.selectedFile);
       }
 
       try {
-        // 修正點 3：統一相對路徑路徑
         const url = this.isEdit 
           ? `/Resident/${this.elderId}`
           : `/Resident`;
         
         const method = this.isEdit ? 'put' : 'post';
         
-        // 呼叫全域實例，解決 415 錯誤並享受 30s 逾時保護
+        // 核心修正：移除 headers，讓瀏覽器自動生成正確的 multipart boundary
         await this.$http({
           method: method,
           url: url,
-          data: formData,
-          headers: { 
-            'Content-Type': 'multipart/form-data' // 顯式聲明以確保檔案傳輸正確
-          }
+          data: formData
         });
 
         this.$message.success(this.isEdit ? '資料更新成功' : '入園登記成功');
         this.$emit('go-back');
       } catch (err) {
-        // 根據截圖中 415 錯誤優化報錯提示
-        const errorMsg = err.response?.data?.message || '儲存失敗，請檢查資料格式或網路連線';
+        // 在控制台印出詳細錯誤，方便除錯
+        console.error('API Error Response:', err.response);
+        
+        const errorMsg = err.response?.data?.message || '儲存失敗，請檢查資料格式（可能是照片辨識失敗）';
         this.$message.error(errorMsg);
       } finally {
         this.submitting = false;
