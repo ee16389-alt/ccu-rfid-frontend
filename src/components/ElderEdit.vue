@@ -43,7 +43,7 @@
             <el-row :gutter="20">
               <el-col :span="12">
                 <el-form-item label="住民年齡">
-                  <el-input-number v-model="elderForm.age" :min="60" :max="120" style="width: 100%"></el-input-number>
+                  <el-input-number v-model="elderForm.age" :min="1" :max="120" style="width: 100%"></el-input-number>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -72,7 +72,8 @@
 </template>
 
 <script>
-// 修正點 1：移除手動導入的 axios，改用 this.$http
+// 修正點 1：完全移除手動 axios 導入，改用掛載於 Vue 原型的 this.$http
+
 export default {
   name: 'ElderEdit',
   props: ['elderId'],
@@ -94,7 +95,7 @@ export default {
   methods: {
     async fetchElderData() {
       try {
-        // 修正點 2：移除多餘的 /manager-api，改用單層路徑
+        // 修正點 2：移除 /manager-api，配合 baseURL 自動拼接
         const res = await this.$http.get(`/Resident/${this.elderId}`);
         this.elderForm = {
           name: res.data.name,
@@ -119,38 +120,41 @@ export default {
 
       this.submitting = true;
       
+      // 使用 FormData 處理包含檔案的請求
       const formData = new FormData();
       formData.append('Name', this.elderForm.name);
       formData.append('Age', this.elderForm.age);
-      formData.append('RfidUid', this.elderForm.rfid_uid);
-      formData.append('Remark', this.elderForm.remark);
+      // 確保 RFID 不為空字串或 null，避免後端格式校驗失敗
+      formData.append('RfidUid', this.elderForm.rfid_uid || ''); 
+      formData.append('Remark', this.elderForm.remark || '');
+      
       if (this.selectedFile) {
         formData.append('Avatar', this.selectedFile);
       }
 
       try {
-        // 修正點 3：改用相對路徑，並移除重複的 manager-api
+        // 修正點 3：統一相對路徑路徑
         const url = this.isEdit 
           ? `/Resident/${this.elderId}`
           : `/Resident`;
         
         const method = this.isEdit ? 'put' : 'post';
         
-        // 使用掛載的 this.$http 以享受 30s 逾時與自動認證
+        // 呼叫全域實例，解決 415 錯誤並享受 30s 逾時保護
         await this.$http({
           method: method,
           url: url,
           data: formData,
           headers: { 
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'multipart/form-data' // 顯式聲明以確保檔案傳輸正確
           }
         });
 
         this.$message.success(this.isEdit ? '資料更新成功' : '入園登記成功');
         this.$emit('go-back');
       } catch (err) {
-        // 優化錯誤提示
-        const errorMsg = err.response?.data?.message || '系統儲存失敗，請檢查網路連線';
+        // 根據截圖中 415 錯誤優化報錯提示
+        const errorMsg = err.response?.data?.message || '儲存失敗，請檢查資料格式或網路連線';
         this.$message.error(errorMsg);
       } finally {
         this.submitting = false;
