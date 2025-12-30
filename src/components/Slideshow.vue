@@ -67,7 +67,7 @@
 <script>
 export default {
   name: 'Slideshow',
-  props: ['activityId', 'rfid_uid'],
+  props: ['activityId', 'rfid'],
   data() {
     return {
       loading: false,
@@ -92,8 +92,9 @@ export default {
         // 修正點 1：移除 /api/ 前綴，改用相對路徑。
         // 配合 main.js 的 baseURL，這會請求至 .../manager-api/activities/{id}/photos
         const res = await this.$http.get(`/activities/${this.activityId}/photos`, {
-          params: { rfid: this.rfid_uid }
+          params: { rfid: this.rfid }
         });
+        
 
         if (res.data.photos && res.data.photos.length > 0) {
           this.photoList = res.data.photos.map(p => ({
