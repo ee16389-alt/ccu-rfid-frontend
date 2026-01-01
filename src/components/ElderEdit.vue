@@ -99,17 +99,23 @@ export default {
         this.elderForm = {
           name: res.data.name || '',
           age: res.data.age || 80,
-          rfid: res.data.rfid || '', // 修正：對齊後端 rfid
+          rfid: res.data.rfid || '', 
           remark: res.data.remark || ''
         };
         
-        // 修正：處理圖片路徑，若是 Firebase 連結則直接顯示
         if (res.data.avatar) {
-          this.imageUrl = res.data.avatar.startsWith('http') 
-            ? res.data.avatar 
-            : `${azureBase}${res.data.avatar}?t=${new Date().getTime()}`;
+          // 核心修正：強制加入隨機參數，繞過瀏覽器對 Firebase 的安全快取限制
+          if (res.data.avatar.startsWith('http')) {
+            const timestamp = new Date().getTime();
+            // 判斷原網址是否已有參數，動態補上 &t= 或 ?t=
+            const separator = res.data.avatar.includes('?') ? '&' : '?';
+            this.imageUrl = `${res.data.avatar}${separator}t=${timestamp}`;
+          } else {
+            this.imageUrl = `${azureBase}${res.data.avatar}?t=${new Date().getTime()}`;
+          }
         }
       } catch (err) {
+        console.error('資料抓取失敗:', err);
         this.$message.error('讀取住民資料失敗');
       }
     },
@@ -127,12 +133,11 @@ export default {
       this.submitting = true;
 
       try {
-        // --- 階段 1: 更新基本資料 (使用 JSON 以避免 415 錯誤) ---
         const residentPayload = {
           name: String(this.elderForm.name),
           age: Number(this.elderForm.age),
           remark: this.elderForm.remark || "",
-          rfid: this.elderForm.rfid || "" // 修正：使用 rfid
+          rfid: this.elderForm.rfid || ""
         };
 
         const residentUrl = this.isEdit ? `/Resident/${this.elderId}` : `/Resident`;
@@ -146,7 +151,6 @@ export default {
 
         const targetId = this.isEdit ? this.elderId : res.data.id;
 
-        // --- 階段 2: 照片處理 (單獨使用 FormData) ---
         if (this.selectedFile && targetId) {
           const avatarFormData = new FormData();
           avatarFormData.append('file', this.selectedFile); 
@@ -163,7 +167,6 @@ export default {
         setTimeout(() => { this.$emit('go-back'); }, 1000);
 
       } catch (err) {
-        console.error('Submit Error:', err.response);
         this.$message.error(err.response?.data?.message || '儲存失敗');
       } finally {
         this.submitting = false;
@@ -179,7 +182,6 @@ export default {
 .avatar-col { display: flex; justify-content: center; }
 .avatar-group { display: flex; flex-direction: column; align-items: center; }
 
-/* 上傳框與預覽 */
 .avatar-uploader {
   width: 200px; height: 200px;
   border: 2px dashed #dcdfe6; border-radius: 50%;
@@ -191,20 +193,16 @@ export default {
 .avatar-preview-wrapper { position: relative; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; }
 .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* 遮罩邏輯優化：修正蓋住照片的問題 */
 .avatar-mask {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.5); color: #fff;
   display: flex; flex-direction: column; justify-content: center; align-items: center;
-  
-  /* 初始狀態隱藏，且不阻擋滑鼠點擊圖片 */
   opacity: 0;
   visibility: hidden;
   transition: all 0.3s ease;
   pointer-events: none; 
 }
 
-/* 僅在滑鼠移入上傳區域時顯現遮罩 */
 .avatar-uploader:hover .avatar-mask {
   opacity: 1;
   visibility: visible;
