@@ -8,7 +8,7 @@
     <el-card v-loading="loading" class="main-card">
       <div v-if="processedPhotos.length > 0" class="photo-grid">
         <div v-for="photo in processedPhotos" :key="photo.photo_id" class="photo-item">
-          <div class="image-wrapper" ref="imageContainer">
+          <div class="image-wrapper">
             <img 
               :ref="'img-' + photo.photo_id"
               :src="photo.photo_url"
@@ -80,16 +80,17 @@ export default {
   },
   mounted() {
     this.fetchAIResults();
+    // 實作自動偵測：監聽視窗大小變更
     window.addEventListener('resize', this.refreshBoxes);
   },
   beforeDestroy() {
+    // 移除監聽器，避免組件銷毀後繼續執行影響效能
     window.removeEventListener('resize', this.refreshBoxes);
   },
   methods: {
-    // 修正百分比顯示邏輯：判斷數值是否已是百分制
+    // 防止百分比變千位數
     formatConfidence(val) {
       if (!val && val !== 0) return '0%';
-      // 如果大於 1，視為已經是百分比；否則乘以 100
       const percent = val > 1 ? val : val * 100;
       return Math.round(percent) + '%';
     },
@@ -109,7 +110,6 @@ export default {
           this.loadMockResults();
         }
       } catch (err) {
-        console.warn('API 獲取失敗', err);
         this.loadMockResults();
       } finally {
         this.processData();
@@ -122,17 +122,15 @@ export default {
       const mockImg = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
       this.rawResults = [{
         "id": "3", "name": "江小信 (範例)", "confidence": 0.95,
-        "photos": [{ "photo_id": 999, "photo_url": mockImg, "bounding_box": [696, 139, 882, 325] }]
+        "photos": [{ "photo_id": 999, "photo_url": mockImg, "bounding_box": [139, 696, 325, 882] }] // 改為 Left, Top...
       }];
     },
 
     processData() {
       const map = {};
       this.rawResults.forEach(person => {
-        // 對接後端新欄位
         const resId = person.id; 
         const resName = person.name;
-
         person.photos.forEach(pic => {
           if (!map[pic.photo_id]) {
             map[pic.photo_id] = { photo_id: pic.photo_id, photo_url: pic.photo_url, detections: [] };
@@ -141,7 +139,7 @@ export default {
             resident_id: resId,
             resident_name: resName,
             confidence: person.confidence || 0,
-            rawBox: pic.bounding_box, // [top, left, bottom, right]
+            rawBox: pic.bounding_box,
             boxStyle: {},
             isEdited: false
           });
@@ -159,28 +157,41 @@ export default {
 
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        const sx = img.clientWidth / img.naturalWidth;
-        const sy = img.clientHeight / img.naturalHeight;
+        // 計算 Offset 補償
+        const { naturalWidth: nw, naturalHeight: nh, clientWidth: cw, clientHeight: ch } = img;
+        const rawRatio = nw / nh;
+        const displayRatio = cw / ch;
+
+        let scale, ox = 0, oy = 0;
+
+        if (displayRatio > rawRatio) {
+          scale = ch / nh;
+          ox = (cw - nw * scale) / 2;
+        } else {
+          scale = cw / nw;
+          oy = (ch - nh * scale) / 2;
+        }
 
         photo.detections.forEach(d => {
-          // ✅ 正確軸向：[x1, y1, x2, y2]
-          const [x1, y1, x2, y2] = d.rawBox;
+          // 同學建議修正：對接 [Left, Top, Right, Bottom]
+          const [left, top, right, bottom] = d.rawBox;
 
           d.boxStyle = {
-            left:   (x1 * sx) + 'px',
-            top:    (y1 * sy) + 'px',
-            width:  ((x2 - x1) * sx) + 'px',
-            height: ((y2 - y1) * sy) + 'px'
+            left:   (left * scale + ox) + 'px',
+            top:    (top * scale + oy) + 'px',
+            width:  ((right - left) * scale) + 'px',
+            height: ((bottom - top) * scale) + 'px'
           };
         });
-
         this.$forceUpdate();
       });
     },
 
-
+    // 視窗大小變更時呼叫此方法重新繪製
     refreshBoxes() {
-      this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
+      if (this.processedPhotos.length > 0) {
+        this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
+      }
     },
 
     async openCorrectionDialog(det) {
@@ -258,7 +269,7 @@ export default {
 .recognition-image { 
   width: 100%; 
   display: block; 
-  object-fit: contain; /* 為了座標精準計算，建議統一使用 contain */
+  object-fit: contain; 
   aspect-ratio: 16 / 9; 
 }
 .face-box { 
@@ -268,6 +279,7 @@ export default {
   cursor: pointer; 
   z-index: 10; 
   box-sizing: border-box;
+  transition: all 0.1s ease-out; /* 增加平滑度 */
 }
 .face-box:hover { border-color: #E6A23C; background-color: rgba(230, 162, 60, 0.2); }
 .name-label { 
@@ -281,6 +293,4 @@ export default {
   border-radius: 4px; 
   white-space: nowrap;
 }
-.name-label.is-edited { background: #409EFF; }
-.action-bar { margin-top: 30px; text-align: center; }
 </style>
