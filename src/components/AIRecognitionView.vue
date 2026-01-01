@@ -8,7 +8,7 @@
     <el-card v-loading="loading" class="main-card">
       <div v-if="processedPhotos.length > 0" class="photo-grid">
         <div v-for="photo in processedPhotos" :key="photo.photo_id" class="photo-item">
-          <div class="image-wrapper">
+          <div class="image-wrapper" ref="imageContainer">
             <img 
               :ref="'img-' + photo.photo_id"
               :src="photo.photo_url"
@@ -24,7 +24,7 @@
               @click="openCorrectionDialog(det)"
             >
               <span class="name-label" :class="{ 'is-edited': det.isEdited }">
-                {{ det.resident_name }} ({{ (det.confidence * 100).toFixed(0) }}%)
+                {{ det.resident_name }} ({{ formatConfidence(det.confidence) }})
               </span>
             </div>
           </div>
@@ -86,19 +86,23 @@ export default {
     window.removeEventListener('resize', this.refreshBoxes);
   },
   methods: {
+    // 修正百分比顯示邏輯：判斷數值是否已是百分制
+    formatConfidence(val) {
+      if (!val && val !== 0) return '0%';
+      // 如果大於 1，視為已經是百分比；否則乘以 100
+      const percent = val > 1 ? val : val * 100;
+      return Math.round(percent) + '%';
+    },
+
     async fetchAIResults() {
       if (!this.activityId || this.activityId === 'null') {
         this.emptyText = '活動 ID 缺失，無法辨識';
         this.loadMockResults();
         return;
       }
-
       this.loading = true;
       try {
-        const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
-          timeout: 120000 
-        });
-        
+        const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, { timeout: 120000 });
         if (response.data && response.data.length > 0) {
           this.rawResults = response.data;
         } else {
@@ -137,7 +141,7 @@ export default {
             resident_id: resId,
             resident_name: resName,
             confidence: person.confidence || 0,
-            rawBox: pic.bounding_box, // 後端格式 [top, left, bottom, right]
+            rawBox: pic.bounding_box, // [top, left, bottom, right]
             boxStyle: {},
             isEdited: false
           });
@@ -153,28 +157,27 @@ export default {
         const photo = this.processedPhotos.find(p => p.photo_id === photoId);
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 取得圖片原始尺寸與當前顯示尺寸
+        // 精準縮放比例計算
         const { naturalWidth: nw, naturalHeight: nh, clientWidth: cw, clientHeight: ch } = img;
         const rawRatio = nw / nh;
         const displayRatio = cw / ch;
 
         let scale, ox = 0, oy = 0;
 
-        // 修正 2：對接正確的位移邏輯
+        // 針對 object-fit: contain (圖片完整顯示在黑色背景內) 的偏移量補償
         if (displayRatio > rawRatio) {
-          // 容器寬度大於圖片比例 → 上下貼齊，左右留白 (偏移 ox)
+          // 左右有留白
           scale = ch / nh;
           ox = (cw - nw * scale) / 2;
         } else {
-          // 容器高度大於圖片比例 → 左右貼齊，上下留白 (偏移 oy)
+          // 上下有留白
           scale = cw / nw;
           oy = (ch - nh * scale) / 2;
         }
 
         photo.detections.forEach(d => {
-          // 修正 3：對接正確的 rawBox 順序 [Top, Left, Bottom, Right]
+          // 嚴格對照後端格式 [Top, Left, Bottom, Right]
           const [top, left, bottom, right] = d.rawBox;
-          
           d.boxStyle = {
             top: (top * scale + oy) + 'px',
             left: (left * scale + ox) + 'px',
@@ -209,7 +212,7 @@ export default {
     saveTempCorrection() {
       if (this.selectedResidentId === 'none' || !this.selectedResidentId) {
         this.currentDet.resident_id = null;
-        this.currentDet.resident_name = "未辨識/非住民";
+        this.currentDet.resident_name = "非住民 (誤報)";
         this.currentDet.isEdited = true;
         this.$message({ message: '已標記為非住民', type: 'warning' });
       } else {
@@ -228,22 +231,15 @@ export default {
       try {
         await this.$confirm('確認所有辨識結果正確嗎？', '存檔確認', { type: 'success' });
         this.submitting = true;
-        
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
-            // 修正 4：傳送符合後端要求的 JSON 陣列格式
             if (det.resident_id) {
-              payload.push({ 
-                photo_id: photo.photo_id, 
-                resident_id: det.resident_id 
-              });
+              payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
             }
           });
         });
-
         await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload);
-        
         this.$message.success('辨識紀錄已成功存檔！');
         this.$emit('go-back');
       } catch (error) {
@@ -257,6 +253,7 @@ export default {
 </script>
 
 <style scoped>
+/* 樣式部分保持不變 */
 .photo-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
 .image-wrapper { 
   position: relative; 
@@ -271,7 +268,7 @@ export default {
 .recognition-image { 
   width: 100%; 
   display: block; 
-  object-fit: contain; /* 改為 contain 配合 ox/oy 偏移計算最為精準 */
+  object-fit: contain; /* 為了座標精準計算，建議統一使用 contain */
   aspect-ratio: 16 / 9; 
 }
 .face-box { 
