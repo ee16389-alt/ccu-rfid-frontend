@@ -10,7 +10,7 @@
       <el-button type="warning" @click="handleBack" class="back-button" icon="el-icon-close">結束放映</el-button>
     </div>
 
-    <el-card shadow="always" class="slideshow-area">
+    <div class="slideshow-area">
       <div class="photo-display">
         <div class="nav-arrow left-arrow" @click="prevPhoto" v-if="photoList.length > 1">
           <i class="el-icon-arrow-left"></i>
@@ -43,7 +43,7 @@
           <i class="el-icon-arrow-right"></i>
         </div>
       </div>
-    </el-card>
+    </div>
 
     <div class="controls-bar">
       <div class="control-panel">
@@ -89,12 +89,9 @@ export default {
     async fetchPhotos() {
       this.loading = true;
       try {
-        // 修正點 1：移除 /api/ 前綴，改用相對路徑。
-        // 配合 main.js 的 baseURL，這會請求至 .../manager-api/activities/{id}/photos
         const res = await this.$http.get(`/activities/${this.activityId}/photos`, {
           params: { rfid: this.rfid }
         });
-        
 
         if (res.data.photos && res.data.photos.length > 0) {
           this.photoList = res.data.photos.map(p => ({
@@ -116,7 +113,6 @@ export default {
 
     loadMockPhotos() {
       this.activityName = '時光記憶精選 (示範模式)';
-      // 修正點 2：使用穩定的絕對路徑確保 Demo 時圖片一定會出來
       const baseUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/";
       this.photoList = [
         { url: `${baseUrl}activity1.png` }, 
@@ -153,20 +149,72 @@ export default {
 </script>
 
 <style scoped>
-/* 此處保留您原本的樣式即可 */
-.slideshow-container { padding: 30px; background-color: #333; min-height: 100vh; color: white; }
+.slideshow-container { padding: 30px; background-color: #333; min-height: 100vh; color: white; box-sizing: border-box; }
 .header-playback { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .main-title { font-size: 28px; margin: 0; color: #FF9933; }
-.slideshow-area { background-color: #000; border: none; position: relative; height: 70vh; display: flex; align-items: center; justify-content: center; }
-.photo-display { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-.main-photo { max-width: 100%; max-height: 100%; }
-.nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 50px; color: rgba(255,255,255,0.5); cursor: pointer; z-index: 10; transition: 0.3s; }
+
+/* 修正 3：定義明確的播放區域，確保背景全黑且不裁切 */
+.slideshow-area { 
+  background-color: #000; 
+  position: relative; 
+  height: 75vh; 
+  width: 100%;
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.photo-display { 
+  position: relative; 
+  width: 100%; 
+  height: 100%; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
+
+/* 修正 4：確保圖片容器與圖片本身都以 contain 模式呈現 */
+.current-photo-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-photo { 
+  width: 100%; 
+  height: 100%; 
+  /* fit="contain" 已在 template 設定，確保不裁切且留黑邊 */
+}
+
+.nav-arrow { 
+  position: absolute; 
+  top: 50%; 
+  transform: translateY(-50%); 
+  font-size: 50px; 
+  color: rgba(255,255,255,0.4); 
+  cursor: pointer; 
+  z-index: 10; 
+  transition: 0.3s; 
+}
 .nav-arrow:hover { color: #FF9933; scale: 1.2; }
 .left-arrow { left: 20px; }
 .right-arrow { right: 20px; }
+
 .controls-bar { margin-top: 30px; text-align: center; }
 .control-panel { display: inline-flex; align-items: center; background: rgba(255,255,255,0.1); padding: 10px 30px; border-radius: 40px; }
 .play-btn { font-size: 30px; margin-right: 20px; }
 .counter-badge { font-size: 24px; font-family: monospace; }
 .current { color: #FF9933; font-weight: bold; }
+
+/* 過渡動畫 */
+.photo-fade-enter-active, .photo-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.photo-fade-enter, .photo-fade-leave-to {
+  opacity: 0;
+}
 </style>
