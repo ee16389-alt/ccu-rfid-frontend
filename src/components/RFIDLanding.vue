@@ -65,7 +65,7 @@ export default {
     async handleStart() {
       this.loading = true;
       this.scanBuffer = '';
-      this.countdown = 3;
+      this.countdown = 5;
 
       // 自動聚焦，準備接收刷卡器訊號
       this.$nextTick(() => {
@@ -76,10 +76,10 @@ export default {
         if (this.countdown > 1) this.countdown--;
       }, 1000);
 
-      // 若 3 秒內未感應，轉入 Demo 模式
+      // 若 5 秒內未感應，轉入 Demo 模式
       this.scanTimer = setTimeout(() => {
         if (this.loading) this.enterDemoMode();
-      }, 3000);
+      }, 5000);
     },
 
     async onScanComplete() {
@@ -138,14 +138,14 @@ export default {
       this.loading = false;
 
       this.$message({
-        message: '【Demo 模式】歡迎回來，唐伯虎先生！',
+        message: '【Demo 模式】歡迎回來，劉大雄先生！',
         type: 'warning'
       });
 
       setTimeout(() => {
         this.$emit('scan-success', {
-          rfid: '116A2434',
-          match: { type: 'subject', name: '唐伯虎', id: '9527' },
+          rfid: '56293304',
+          match: { type: 'subject', name: '劉大雄', id: '33' },
           activities: []
         });
       }, 1200);

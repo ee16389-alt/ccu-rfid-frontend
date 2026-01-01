@@ -39,7 +39,7 @@
 
           <el-col :span="16">
             <el-form-item label="住民姓名" required>
-              <el-input v-model="elderForm.name" placeholder="例如：唐伯虎"></el-input>
+              <el-input v-model="elderForm.name" placeholder="例如：劉大雄"></el-input>
             </el-form-item>
             <el-row :gutter="20">
               <el-col :span="12">

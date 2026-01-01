@@ -139,7 +139,7 @@ export default {
         },
         { 
           id: 'm2', 
-          name: '唐伯虎', 
+          name: '劉大雄', 
           age: 75, 
           rfid: '8A303053', 
           avatar: 'https://images.unsplash.com/photo-1544144433-d50aff500b91?auto=format&fit=crop&w=150&q=80' 
