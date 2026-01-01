@@ -2,7 +2,7 @@
   <div class="ai-recognition-container">
     <div class="header-section">
       <el-page-header @back="$emit('go-back')" content="AI 辨識結果預覽"></el-page-header>
-      <el-tag v-if="isDemoMode" type="warning" effect="dark" class="demo-badge">示範模式 (API 逾時)</el-tag>
+      <el-tag v-if="isDemoMode" type="warning" effect="dark" class="demo-badge">示範模式 (使用 Mock 資料)</el-tag>
     </div>
 
     <el-card v-loading="loading" class="main-card">
@@ -24,7 +24,7 @@
               @click="openCorrectionDialog(det)"
             >
               <span class="name-label" :class="{ 'is-edited': det.isEdited }">
-                {{ det.resident_name }} ({{ det.confidence.toFixed(0) }}%)
+                {{ det.resident_name }} ({{ (det.confidence * 100).toFixed(0) }}%)
               </span>
             </div>
           </div>
@@ -32,20 +32,22 @@
       </div>
       
       <div v-else-if="!loading" class="empty-state">
-        <el-empty description="目前該活動尚未有辨識資料"></el-empty>
+        <el-empty :description="emptyText"></el-empty>
       </div>
 
       <div class="action-bar">
         <el-button type="success" size="large" icon="el-icon-check" :loading="submitting" @click="handleConfirm">
-          確認並正式存檔
+          確認所有辨識結果並正式存檔
         </el-button>
       </div>
     </el-card>
 
-    <el-dialog title="修正辨識結果" :visible.sync="dialogVisible" width="30%">
-      <el-form label-width="80px">
+    <el-dialog title="修正辨識結果" :visible.sync="dialogVisible" width="35%">
+      <el-form label-width="100px">
         <el-form-item label="正確長者">
-          <el-select v-model="selectedResidentId" filterable placeholder="請選擇長者">
+          <el-select v-model="selectedResidentId" filterable placeholder="請選擇長者" clearable>
+            <el-option label="❌ 非住民 (不屬於任何人/背景)" value="none"></el-option>
+            <el-divider v-if="allResidents.length > 0"></el-divider>
             <el-option v-for="r in allResidents" :key="r.id" :label="r.name" :value="r.id"></el-option>
           </el-select>
         </el-form-item>
@@ -72,13 +74,12 @@ export default {
       dialogVisible: false,
       allResidents: [],
       currentDet: {},
-      selectedResidentId: ''
+      selectedResidentId: '',
+      emptyText: '目前該活動尚未有辨識資料'
     };
   },
   mounted() {
-    this.$nextTick(() => {
-      this.fetchAIResults();
-    });
+    this.fetchAIResults();
     window.addEventListener('resize', this.refreshBoxes);
   },
   beforeDestroy() {
@@ -86,32 +87,26 @@ export default {
   },
   methods: {
     async fetchAIResults() {
+      if (!this.activityId || this.activityId === 'null') {
+        this.emptyText = '活動 ID 缺失，無法辨識';
+        this.loadMockResults();
+        return;
+      }
+
       this.loading = true;
-      this.isDemoMode = false;
-      const azureBase = 'https://ccu-rfid-project-arhddfhugverf8dr.japanwest-01.azurewebsites.net';
-      
       try {
         const response = await this.$http.post(`/Activity/${this.activityId}/recognize`, {}, {
           timeout: 120000 
         });
         
         if (response.data && response.data.length > 0) {
-          this.rawResults = response.data.map(person => {
-            person.photos = person.photos.map(pic => {
-              if (pic.photo_url && !pic.photo_url.startsWith('http')) {
-                const cleanPath = pic.photo_url.replace(/^\/+/, '');
-                pic.photo_url = `${azureBase}/${cleanPath}?t=${new Date().getTime()}`;
-              }
-              return pic;
-            });
-            return person;
-          });
+          this.rawResults = response.data;
         } else {
-          this.loadMockResults(); 
+          this.loadMockResults();
         }
       } catch (err) {
-        console.warn('AI API 獲取失敗，啟動示範模式', err);
-        this.loadMockResults(); 
+        console.warn('API 獲取失敗', err);
+        this.loadMockResults();
       } finally {
         this.processData();
         this.loading = false;
@@ -120,25 +115,19 @@ export default {
 
     loadMockResults() {
       this.isDemoMode = true;
-      const stableImageUrl = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
-      this.rawResults = [
-        {
-          "id": "3",
-          "name": "江小信 (範例)",
-          "confidence": 95,
-          "photos": [
-            { "photo_id": 999, "photo_url": stableImageUrl, "bounding_box": [150, 300, 450, 600] }
-          ]
-        }
-      ];
+      const mockImg = "https://ee16389-alt.github.io/ccu-rfid-frontend/slideshow/activity2.png";
+      this.rawResults = [{
+        "id": "3", "name": "江小信 (範例)", "confidence": 0.95,
+        "photos": [{ "photo_id": 999, "photo_url": mockImg, "bounding_box": [696, 139, 882, 325] }]
+      }];
     },
 
     processData() {
       const map = {};
       this.rawResults.forEach(person => {
-        // 修正點 1：對接後端 JSON 欄位
-        const resId = person.id;   
-        const resName = person.name; 
+        // 對接後端新欄位
+        const resId = person.id; 
+        const resName = person.name;
 
         person.photos.forEach(pic => {
           if (!map[pic.photo_id]) {
@@ -147,55 +136,50 @@ export default {
           map[pic.photo_id].detections.push({
             resident_id: resId,
             resident_name: resName,
-            confidence: person.confidence,
-            rawBox: pic.bounding_box,
+            confidence: person.confidence || 0,
+            rawBox: pic.bounding_box, // 後端格式 [top, left, bottom, right]
             boxStyle: {},
-            isEdited: false 
+            isEdited: false
           });
         });
       });
-      
-      // 修正點 2：只顯示最新一張照片
-      const sortedPhotos = Object.values(map).sort((a, b) => b.photo_id - a.photo_id);
-      this.processedPhotos = sortedPhotos.length > 0 ? [sortedPhotos[0]] : [];
+      const sorted = Object.values(map).sort((a, b) => b.photo_id - a.photo_id);
+      this.processedPhotos = sorted.length > 0 ? [sorted[0]] : [];
     },
 
-    drawBoxes(id) {
+    drawBoxes(photoId) {
       this.$nextTick(() => {
-        const imgRef = this.$refs['img-' + id];
-        const img = Array.isArray(imgRef) ? imgRef[0] : imgRef;
-        const photo = this.processedPhotos.find(p => p.photo_id === id);
-        
+        const img = this.$refs['img-' + photoId][0] || this.$refs['img-' + photoId];
+        const photo = this.processedPhotos.find(p => p.photo_id === photoId);
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 座標轉換邏輯（適配裁切位移）
-        const sx = img.clientWidth / img.naturalWidth;
-        const sy = img.clientHeight / img.naturalHeight;
-        const computedStyle = window.getComputedStyle(img);
-        const objectFit = computedStyle.getPropertyValue('object-fit');
+        // 取得圖片原始尺寸與當前顯示尺寸
+        const { naturalWidth: nw, naturalHeight: nh, clientWidth: cw, clientHeight: ch } = img;
+        const rawRatio = nw / nh;
+        const displayRatio = cw / ch;
+
+        let scale, ox = 0, oy = 0;
+
+        // 修正 2：對接正確的位移邏輯
+        if (displayRatio > rawRatio) {
+          // 容器寬度大於圖片比例 → 上下貼齊，左右留白 (偏移 ox)
+          scale = ch / nh;
+          ox = (cw - nw * scale) / 2;
+        } else {
+          // 容器高度大於圖片比例 → 左右貼齊，上下留白 (偏移 oy)
+          scale = cw / nw;
+          oy = (ch - nh * scale) / 2;
+        }
 
         photo.detections.forEach(d => {
-          const [t, l, b, r] = d.rawBox;
-          let topOffset = 0;
-          let leftOffset = 0;
-
-          if (objectFit === 'cover') {
-            const renderRatio = img.clientWidth / img.clientHeight;
-            const naturalRatio = img.naturalWidth / img.naturalHeight;
-            if (renderRatio > naturalRatio) {
-              const scaledHeight = img.naturalHeight * sx;
-              topOffset = (img.clientHeight - scaledHeight) / 2;
-            } else {
-              const scaledWidth = img.naturalWidth * sy;
-              leftOffset = (img.clientWidth - scaledWidth) / 2;
-            }
-          }
-
+          // 修正 3：對接正確的 rawBox 順序 [Top, Left, Bottom, Right]
+          const [top, left, bottom, right] = d.rawBox;
+          
           d.boxStyle = {
-            top: (t * (objectFit === 'cover' && leftOffset !== 0 ? sy : sy) + topOffset) + 'px',
-            left: (l * (objectFit === 'cover' && topOffset !== 0 ? sx : sx) + leftOffset) + 'px',
-            width: ((r - l) * (leftOffset !== 0 ? sy : sx)) + 'px',
-            height: ((b - t) * (topOffset !== 0 ? sx : sy)) + 'px'
+            top: (top * scale + oy) + 'px',
+            left: (left * scale + ox) + 'px',
+            width: ((right - left) * scale) + 'px',
+            height: ((bottom - top) * scale) + 'px'
           };
         });
         this.$forceUpdate();
@@ -203,18 +187,14 @@ export default {
     },
 
     refreshBoxes() {
-      setTimeout(() => {
-        this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
-      }, 200);
+      this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
     },
 
     async openCorrectionDialog(det) {
       this.currentDet = det;
-      this.selectedResidentId = det.resident_id;
+      this.selectedResidentId = det.resident_id || 'none';
+      if (this.allResidents.length === 0) await this.fetchAllResidents();
       this.dialogVisible = true;
-      if (this.allResidents.length === 0) {
-        await this.fetchAllResidents();
-      }
     },
 
     async fetchAllResidents() {
@@ -222,17 +202,24 @@ export default {
         const res = await this.$http.get('/Resident');
         this.allResidents = res.data;
       } catch (err) {
-        this.$message.error('無法獲取長者清單');
+        this.$message.error('無法讀取長者清單');
       }
     },
 
     saveTempCorrection() {
-      const selected = this.allResidents.find(r => r.id === this.selectedResidentId);
-      if (selected) {
-        this.currentDet.resident_id = selected.id;
-        this.currentDet.resident_name = selected.name;
+      if (this.selectedResidentId === 'none' || !this.selectedResidentId) {
+        this.currentDet.resident_id = null;
+        this.currentDet.resident_name = "未辨識/非住民";
         this.currentDet.isEdited = true;
-        this.$message({ message: '修改已暫存', type: 'info', duration: 1500 });
+        this.$message({ message: '已標記為非住民', type: 'warning' });
+      } else {
+        const selected = this.allResidents.find(r => r.id === this.selectedResidentId);
+        if (selected) {
+          this.currentDet.resident_id = selected.id;
+          this.currentDet.resident_name = selected.name;
+          this.currentDet.isEdited = true;
+          this.$message({ message: '修改已暫存', type: 'info' });
+        }
       }
       this.dialogVisible = false;
     },
@@ -245,13 +232,19 @@ export default {
         const payload = [];
         this.processedPhotos.forEach(photo => {
           photo.detections.forEach(det => {
-            payload.push({ photo_id: photo.photo_id, resident_id: det.resident_id });
+            // 修正 4：傳送符合後端要求的 JSON 陣列格式
+            if (det.resident_id) {
+              payload.push({ 
+                photo_id: photo.photo_id, 
+                resident_id: det.resident_id 
+              });
+            }
           });
         });
 
         await this.$http.post(`/Activity/${this.activityId}/recognize/confirm`, payload);
         
-        this.$message.success('辨識結果已同步！');
+        this.$message.success('辨識紀錄已成功存檔！');
         this.$emit('go-back');
       } catch (error) {
         if (error !== 'cancel') this.$message.error('儲存失敗');
@@ -264,13 +257,43 @@ export default {
 </script>
 
 <style scoped>
-.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }
-.image-wrapper { position: relative; display: inline-block; width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.recognition-image { width: 100%; display: block; object-fit: cover; aspect-ratio: 4 / 3; }
-.face-box { position: absolute; border: 3px solid #FF9933; background-color: rgba(255, 153, 51, 0.1); cursor: pointer; transition: all 0.3s; z-index: 10; }
-.face-box:hover { border-color: #f56c6c; background-color: rgba(245, 108, 108, 0.2); }
-.name-label { position: absolute; top: -28px; left: -3px; background: #FF9933; color: white; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 4px 4px 0 0; }
+.photo-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
+.image-wrapper { 
+  position: relative; 
+  display: block; 
+  width: 100%; 
+  max-width: 800px; 
+  margin: 0 auto; 
+  border-radius: 8px; 
+  overflow: hidden; 
+  background: #000;
+}
+.recognition-image { 
+  width: 100%; 
+  display: block; 
+  object-fit: contain; /* 改為 contain 配合 ox/oy 偏移計算最為精準 */
+  aspect-ratio: 16 / 9; 
+}
+.face-box { 
+  position: absolute; 
+  border: 3px solid #67C23A; 
+  background-color: rgba(103, 194, 58, 0.1); 
+  cursor: pointer; 
+  z-index: 10; 
+  box-sizing: border-box;
+}
+.face-box:hover { border-color: #E6A23C; background-color: rgba(230, 162, 60, 0.2); }
+.name-label { 
+  position: absolute; 
+  top: -30px; 
+  left: -3px; 
+  background: #67C23A; 
+  color: white; 
+  padding: 2px 8px; 
+  font-size: 12px; 
+  border-radius: 4px; 
+  white-space: nowrap;
+}
 .name-label.is-edited { background: #409EFF; }
 .action-bar { margin-top: 30px; text-align: center; }
-.demo-badge { margin-left: 20px; }
 </style>
