@@ -151,43 +151,33 @@ export default {
       this.processedPhotos = sorted.length > 0 ? [sorted[0]] : [];
     },
 
-    drawBoxes(photoId) {
+    drawBoxes(id) {
       this.$nextTick(() => {
-        const img = this.$refs['img-' + photoId][0] || this.$refs['img-' + photoId];
-        const photo = this.processedPhotos.find(p => p.photo_id === photoId);
+        const imgRef = this.$refs['img-' + id];
+        const img = Array.isArray(imgRef) ? imgRef[0] : imgRef;
+        const photo = this.processedPhotos.find(p => p.photo_id === id);
+
         if (!img || !photo || img.naturalWidth === 0) return;
 
-        // 精準縮放比例計算
-        const { naturalWidth: nw, naturalHeight: nh, clientWidth: cw, clientHeight: ch } = img;
-        const rawRatio = nw / nh;
-        const displayRatio = cw / ch;
-
-        let scale, ox = 0, oy = 0;
-
-        // 針對 object-fit: contain (圖片完整顯示在黑色背景內) 的偏移量補償
-        if (displayRatio > rawRatio) {
-          // 左右有留白
-          scale = ch / nh;
-          ox = (cw - nw * scale) / 2;
-        } else {
-          // 上下有留白
-          scale = cw / nw;
-          oy = (ch - nh * scale) / 2;
-        }
+        const sx = img.clientWidth / img.naturalWidth;
+        const sy = img.clientHeight / img.naturalHeight;
 
         photo.detections.forEach(d => {
-          // 嚴格對照後端格式 [Top, Left, Bottom, Right]
-          const [top, left, bottom, right] = d.rawBox;
+          // ✅ 正確軸向：[x1, y1, x2, y2]
+          const [x1, y1, x2, y2] = d.rawBox;
+
           d.boxStyle = {
-            top: (top * scale + oy) + 'px',
-            left: (left * scale + ox) + 'px',
-            width: ((right - left) * scale) + 'px',
-            height: ((bottom - top) * scale) + 'px'
+            left:   (x1 * sx) + 'px',
+            top:    (y1 * sy) + 'px',
+            width:  ((x2 - x1) * sx) + 'px',
+            height: ((y2 - y1) * sy) + 'px'
           };
         });
+
         this.$forceUpdate();
       });
     },
+
 
     refreshBoxes() {
       this.processedPhotos.forEach(p => this.drawBoxes(p.photo_id));
